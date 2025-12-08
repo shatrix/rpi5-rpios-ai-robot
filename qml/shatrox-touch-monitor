@@ -1,0 +1,39 @@
+#!/bin/bash
+# Touch Monitor - Monitors ADS7846 interrupt count
+# Since pen_down doesn't work but IRQs fire, we monitor /proc/interrupts
+# FIXED: Added threshold to filter out spurious noise interrupts
+
+TRIGGER_FILE="/tmp/shatrox-touch-trigger"
+LAST_COUNT=0
+LAST_TRIGGER_TIME=0
+# Minimum interrupt change to consider as a real touch (filters noise)
+MIN_IRQ_CHANGE=3
+# Minimum time between triggers (seconds)
+DEBOUNCE_SECONDS=2
+
+echo "Touch monitor starting - watching ADS7846 IRQ count (threshold: $MIN_IRQ_CHANGE)"
+
+while true; do
+    # Get current interrupt count for ads7846
+    CURRENT_COUNT=$(grep ads7846 /proc/interrupts | awk '{print $2}')
+    
+    if [ -n "$CURRENT_COUNT" ] && [ "$LAST_COUNT" -gt 0 ]; then
+        IRQ_DELTA=$((CURRENT_COUNT - LAST_COUNT))
+        CURRENT_TIME=$(date +%s)
+        TIME_SINCE_LAST=$((CURRENT_TIME - LAST_TRIGGER_TIME))
+        
+        # Only trigger if enough IRQs changed AND enough time has passed
+        if [ "$IRQ_DELTA" -ge "$MIN_IRQ_CHANGE" ] && [ "$TIME_SINCE_LAST" -ge "$DEBOUNCE_SECONDS" ]; then
+            echo "$(date +%s%N)" > "$TRIGGER_FILE"
+            echo "Touch detected! IRQ delta: $IRQ_DELTA (count: $LAST_COUNT -> $CURRENT_COUNT)"
+            
+            # Play laugh sound directly
+            speak "ha ha ha ha ha!" &
+            
+            LAST_TRIGGER_TIME=$CURRENT_TIME
+        fi
+    fi
+    
+    LAST_COUNT=$CURRENT_COUNT
+    sleep 0.2
+done

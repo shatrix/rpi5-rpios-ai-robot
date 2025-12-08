@@ -1,0 +1,30 @@
+#!/bin/bash
+################################################################################
+# speak - Text-to-speech wrapper using Piper neural TTS
+################################################################################
+
+# Check if text provided
+if [ $# -eq 0 ]; then
+    echo "Usage: speak \"text to speak\""
+    exit 1
+fi
+
+# Get audio device
+AUDIO_DEVICE=$(detect-audio.sh)
+if [ -z "$AUDIO_DEVICE" ]; then
+    echo "Error: No audio device found"
+    exit 1
+fi
+
+# Voice model location
+VOICE_MODEL="/usr/share/piper-voices/default.onnx"
+
+if [ ! -f "$VOICE_MODEL" ]; then
+    echo "Error: Voice model not found at $VOICE_MODEL"
+    exit 1
+fi
+
+# Use Piper for TTS and play through aplay
+echo "$1" | piper --model "$VOICE_MODEL" --output_file - | aplay -D "$AUDIO_DEVICE" 2>/dev/null
+
+exit 0

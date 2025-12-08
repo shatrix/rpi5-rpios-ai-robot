@@ -1,0 +1,12 @@
+# Python dependencies for AI Chatbot and Button Service
+# Install with: pip3 install --break-system-packages -r requirements.txt
+
+# AI and ML
+ollama>=0.1.0
+vosk>=0.3.45
+
+# GPIO control (requires libgpiod-dev system package)
+gpiod>=2.0.0
+
+# Note: System dependencies installed via apt in 01-system-dependencies.sh
+#   - libgpiod-dev (required for gpiod Python package)

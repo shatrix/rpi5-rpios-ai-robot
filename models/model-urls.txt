@@ -1,0 +1,27 @@
+# AI Model URLs and Information
+# This file documents the models used in this project.
+# Models are downloaded via ollama pull (no manual download needed)
+
+# Text Model: Llama 3.2:1b
+#   Source: Meta AI
+#   Download: ollama pull llama3.2:1b
+#   Size: ~1GB
+#   RAM Usage: ~1.5GB
+#   Performance: Fast, concise 1-sentence answers
+
+# Vision Model: Moondream
+#   Source: vikhyatk on HuggingFace
+#   Download: ollama pull moondream
+#   Size: ~1.7GB
+#   RAM Usage: ~2.6GB
+#   Performance: Accurate image descriptions, ~60s processing time
+
+# Speech Recognition: VOSK
+#   Model: vosk-model-small-en-us-0.15
+#   URL: https://alphacephei.com/vosk/models/vosk-model-small-en-us-0.15.zip
+#   Size: 40MB
+#   Alternative (better accuracy): vosk-model-en-us-0.22 (~1.8GB)
+
+# Text-to-Speech: Piper
+#   Voices: en_US-ryan-medium, en_US-lessac-medium
+#   Downloaded automatically by setup script

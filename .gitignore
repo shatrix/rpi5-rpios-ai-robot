@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Local test files
+*.log
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Temporary files
+/tmp/
+*.tmp
+
+# Model files (too large for git)
+models/*.gguf
+models/*.zip
+
+# Optional: If you don't want to commit large models
+# Uncomment these if models are too big:
+# *.gguf
+# *.bin

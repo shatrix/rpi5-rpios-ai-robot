@@ -1,0 +1,16 @@
+[Unit]
+Description=SHATROX Touch Monitor (ADS7846 IRQ watcher)
+After=shatrox-display.service
+Wants=shatrox-display.service
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/shatrox-touch-monitor
+Restart=always
+RestartSec=3s
+User=root
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

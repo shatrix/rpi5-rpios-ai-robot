@@ -1,0 +1,21 @@
+[Unit]
+Description=SHATROX Robot Face Display (QML)
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/shatrox-display-start
+Restart=always
+RestartSec=3s
+User=root
+StandardOutput=journal
+StandardError=journal
+
+# Qt/QML Environment
+Environment=QT_QPA_PLATFORM=eglfs
+Environment=QT_QPA_EGLFS_INTEGRATION=eglfs_kms
+Environment=QML_XHR_ALLOW_FILE_READ=1
+Environment=QT_LOGGING_RULES=qt.qpa.input=true
+
+[Install]
+WantedBy=multi-user.target

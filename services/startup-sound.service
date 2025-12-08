@@ -1,0 +1,14 @@
+[Unit]
+Description=Startup Sound/Greeting Service
+After=network.target multi-user.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/startup-sound.sh
+RemainAfterExit=yes
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

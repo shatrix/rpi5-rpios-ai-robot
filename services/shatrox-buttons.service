@@ -1,0 +1,19 @@
+[Unit]
+Description=SHATROX Button Monitor Service
+After=network.target ai-chatbot.service
+Wants=ai-chatbot.service
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/shatrox-buttons.py
+Restart=on-failure
+RestartSec=5s
+User=root
+StandardOutput=journal
+StandardError=journal
+
+# Environment
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target
