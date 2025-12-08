@@ -22,6 +22,39 @@ Automated setup to replicate a Yocto-based AI robot system on Raspberry Pi OS (D
 - **Robot Face GUI:** QML-based display with animated eyes, touch interaction
 - **Fully Offline:** All AI processing runs locally on the Pi
 
+## Hardware Photos
+
+<table>
+<tr>
+<td width="50%">
+
+![Assembled Robot Head](images/hardware/rpi5-assembled-robot-head.jpg)
+*Assembled robot head with 3.5" display and camera*
+
+</td>
+<td width="50%">
+
+![Robot Front View](images/hardware/rpi5-front-robot-head.jpg)
+*Front view showing animated robot face*
+
+</td>
+</tr>
+<tr>
+<td width="50%">
+
+![Camera and Microphone Setup](images/hardware/rpi5-camera-mic.jpg)
+*RPi Camera Module 3 and USB microphone*
+
+</td>
+<td width="50%">
+
+![GPIO Button Testing](images/hardware/rpi5-test-buttons.jpg)
+*GPIO button layout for robot controls*
+
+</td>
+</tr>
+</table>
+
 ## Quick Start
 
 ### 1. Flash Raspberry Pi OS
