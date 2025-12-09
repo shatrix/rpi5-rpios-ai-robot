@@ -18,9 +18,12 @@ Automated setup to replicate a Yocto-based AI robot system on Raspberry Pi OS (D
 - **Camera Vision:** Press K3 to capture and describe what the camera sees
 - **Text-to-Speech:** Natural-sounding Piper neural TTS
 - **Speech Recognition:** Offline VOSK ASR (no internet required after setup)
-- **LLM:** Local Ollama with Llama 3.2:1b (text) and Moondream (vision) models
+- **LLM:** Ollama with Llama 3.2:1b (text) and Moondream/qwen3-vl (vision) models
+  - **Local Mode:** All processing on RPi5 (fully offline)
+  - **Network Mode:** Optional network GPU server for 30x faster vision (2s vs 60s)
+  - **Auto-Fallback:** Automatic fallback to local on network failure
 - **Robot Face GUI:** QML-based display with animated eyes, touch interaction
-- **Fully Offline:** All AI processing runs locally on the Pi
+- **Flexible Deployment:** Choose between fully offline or network-accelerated vision
 
 ## Hardware Photos
 
@@ -86,7 +89,10 @@ The setup will:
 - Expand filesystem (requires reboot)
 - Install all dependencies
 - Configure hardware (display, camera, audio)
-- Download and configure AI models (~2.7GB download)
+- **Prompt for Ollama configuration:**
+  - **Option 1:** Local Ollama (fully offline, slower vision ~60s)
+  - **Option 2:** Network Ollama (GPU server, faster vision ~2s with auto-fallback)
+- Download and configure AI models (~2.7GB download for local mode)
 - Install and enable all services
 
 **Time:** ~30-45 minutes (depending on internet speed)
@@ -103,6 +109,7 @@ The setup will:
 
 ## System Architecture
 
+### Local Mode (Fully Offline)
 ```
 ┌─────────────────────────────────────────────┐
 │         3.5" Touch Display (QML)            │
@@ -130,8 +137,41 @@ The setup will:
               │                     │
         ┌──────▼─────┐      ┌───────▼────────┐
         │ Llama 3.2  │      │  Moondream     │
-        │ 1B Text    │      │  Vision        │
+        │ 1B Text    │      │  Vision (~60s) │
         └────────────┘      └────────────────┘
+```
+
+### Network Mode (GPU Accelerated with Fallback)
+```
+┌─────────────────────────────────────────────┐
+│         3.5" Touch Display (QML)            │
+│    ┌─────────────────────────────────┐     │
+│    │   Robot Face with Eyes          │     │
+│    │   CPU Temp · Log Display        │     │
+│    └─────────────────────────────────┘     │
+└─────────────────────────────────────────────┘
+                     │
+        ┌────────────┴────────────┐
+        │                         │
+┌───────▼────────┐      ┌─────────▼────────┐
+│ Button Service │      │  AI Chatbot      │
+│  (8 GPIO pins) │◄────►│  Orchestration   │
+└────────────────┘      └──────────────────┘
+                               │
+        ┌──────────────────────┼──────────────┐
+        │                      │              │
+┌───────▼─────┐    ┌──────────▼──┐    ┌──────▼──────┐
+│ VOSK ASR    │    │Local Ollama │    │  Piper TTS  │
+│ (Offline)   │    │ (Fallback)  │    │  (Neural)   │
+└─────────────┘    └──────────────┘    └─────────────┘
+                         │
+        ┌────────────┬───┴───┬────────────────┐
+        │            │       │                │
+  ┌─────▼─────┐  ┌──▼───────▼─────────┐  ┌───▼────────┐
+  │ Llama 3.2 │  │ Network Ollama GPU │  │ Moondream  │
+  │ 1B Text   │  │  (Primary Vision)  │  │ (Fallback) │
+  └───────────┘  │   qwen3-vl (~2s)   │  │   (~60s)   │
+                 └────────────────────┘  └────────────┘
 ```
 
 ## Services
@@ -149,6 +189,42 @@ sudo journalctl -u shatrox-buttons -f
 # Restart service
 sudo systemctl restart ai-chatbot
 ```
+
+## Configuration
+
+### Network Ollama Setup (Optional)
+
+For 30x faster image processing, configure a network GPU server:
+
+**1. Edit configuration:**
+```bash
+sudo nano /etc/ai-chatbot/config.ini
+```
+
+**2. Update the `[ollama]` section:**
+```ini
+[ollama]
+# Use 'local' for local Ollama, or 'IP:PORT' for network server
+ollama_host = 192.168.2.170:11434
+# Vision model on network server (e.g., qwen3-vl, llava, etc.)
+network_vision_model = qwen3-vl
+# Connection timeout (seconds)
+network_timeout = 5
+```
+
+**3. Restart service:**
+```bash
+sudo systemctl restart ai-chatbot
+```
+
+**Performance Comparison:**
+| Mode | Model | Processing Time |
+|------|-------|----------------|
+| Network (GPU) | qwen3-vl | ~2 seconds |
+| Local (RPi5) | moondream | ~60 seconds |
+| Fallback | moondream | ~60 seconds |
+
+**Note:** Network mode automatically falls back to local moondream if the network server is unreachable.
 
 ## Storage Requirements
 
@@ -220,7 +296,24 @@ free -h
 sudo systemctl restart ollama
 
 # Consider using only one model at a time
-# Edit /etc/ai-chatbot/config.ini
+# Or use network Ollama for vision processing
+# Edit /etc/ai-chatbot/config.ini to configure network mode
+```
+
+### Network Ollama Not Working
+
+```bash
+# Check network connectivity
+ping 192.168.2.170
+
+# Test Ollama API
+curl http://192.168.2.170:11434/api/version
+
+# Check logs for fallback messages
+sudo journalctl -u ai-chatbot -n 100 | grep -i "network\|fallback"
+
+# Verify model exists on server
+# SSH to network server and run: ollama list
 ```
 
 ## Upgrading VOSK Model

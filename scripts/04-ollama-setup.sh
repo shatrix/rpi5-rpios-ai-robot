@@ -6,7 +6,106 @@
 
 set -e
 
-echo "=== Installing Ollama ==="
+echo "=== Ollama Configuration ==="
+
+# Configuration
+CONFIG_FILE="/etc/ai-chatbot/config.ini"
+CONFIG_DIR="/etc/ai-chatbot"
+
+# Ensure config directory exists
+mkdir -p "$CONFIG_DIR"
+
+# Prompt for Ollama configuration
+echo ""
+echo "Choose Ollama setup for vision processing:"
+echo "  1) Local Ollama (RPi5, ~60s per image with moondream)"
+echo "  2) Network Ollama (faster GPU server, ~2s per image)"
+echo ""
+read -p "Enter choice [1/2] (default: 1): " OLLAMA_CHOICE
+OLLAMA_CHOICE=${OLLAMA_CHOICE:-1}
+
+OLLAMA_HOST="local"
+NETWORK_MODEL="moondream"
+
+if [ "$OLLAMA_CHOICE" = "2" ]; then
+    echo ""
+    read -p "Enter network Ollama server IP address: " OLLAMA_IP
+    read -p "Enter network Ollama server port (default: 11434): " OLLAMA_PORT
+    OLLAMA_PORT=${OLLAMA_PORT:-11434}
+    read -p "Enter vision model name on network server (e.g., qwen3-vl): " NETWORK_MODEL
+    
+    OLLAMA_HOST="${OLLAMA_IP}:${OLLAMA_PORT}"
+    
+    echo ""
+    echo "✓ Network Ollama configured:"
+    echo "  Host: $OLLAMA_HOST"
+    echo "  Vision Model: $NETWORK_MODEL"
+else
+    echo "✓ Using local Ollama"
+fi
+
+# Generate/update configuration file
+echo ""
+echo "→ Updating configuration file: $CONFIG_FILE"
+
+cat > "$CONFIG_FILE" << EOF
+[ollama]
+# Ollama server configuration
+# Use 'local' for local Ollama server, or 'IP:PORT' for network server
+ollama_host = $OLLAMA_HOST
+# Vision model to use on network server (if ollama_host is not 'local')
+network_vision_model = $NETWORK_MODEL
+# Connection timeout for network Ollama (seconds)
+network_timeout = 5
+
+[llm]
+# System prompt for concise answers (robot personality)
+system_prompt = You are a helpful robot. Answer in 1 sentence maximum. Be direct and concise.
+# Ollama models
+text_model = llama3.2:1b
+vision_model = moondream
+max_tokens = 50
+temperature = 0.7
+
+[vosk]
+# VOSK ASR settings
+model_path = /usr/share/vosk-models/default
+sample_rate = 16000
+
+[audio]
+# Audio device will be auto-detected by detect-audio.sh
+# USB Audio Device is typically card 0 on RPi OS
+microphone_device = plughw:0,0
+speaker_device = auto
+sample_rate = 16000
+
+[camera]
+enable = true
+resolution = 640x480
+
+[behavior]
+# Auto-reset conversation after 5 minutes of inactivity
+chat_history_timeout = 300
+max_history_messages = 10
+EOF
+
+chmod 644 "$CONFIG_FILE"
+echo "✓ Configuration saved to $CONFIG_FILE"
+
+# Skip local Ollama installation if using network server
+if [ "$OLLAMA_CHOICE" = "2" ]; then
+    echo ""
+    echo "=== Skipping Local Ollama Installation (using network server) ==="
+    echo ""
+    echo "  Configuration complete"
+    echo "  Network server: $OLLAMA_HOST"
+    echo "  Vision model: $NETWORK_MODEL"
+    echo ""
+    exit 0
+fi
+
+echo ""
+echo "=== Installing Local Ollama ==="
 
 # Check if Ollama is already installed
 if command -v ollama &> /dev/null; then

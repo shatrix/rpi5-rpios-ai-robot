@@ -68,6 +68,10 @@ class AIChatBot:
         # Load VOSK model
         self.load_vosk_model()
         
+        # Initialize Ollama client (network or local)
+        self.ollama_client = self.init_ollama_client()
+        self.use_network_ollama = self.config['ollama']['ollama_host'] != 'local'
+        
     def load_vosk_model(self):
         """Load VOSK speech recognition model"""
         self.log("Loading VOSK model...")
@@ -82,11 +86,29 @@ class AIChatBot:
             self.log(f"Failed to load VOSK model: {e}", "ERROR")
             sys.exit(1)
     
+    def init_ollama_client(self):
+        """Initialize Ollama client (network or local)"""
+        ollama_host = self.config['ollama']['ollama_host']
+        
+        if ollama_host != 'local':
+            # Network Ollama server
+            self.log(f"Using network Ollama server: {ollama_host}")
+            return ollama.Client(host=f"http://{ollama_host}")
+        else:
+            # Local Ollama
+            self.log("Using local Ollama server")
+            return ollama.Client()
+    
     def load_config(self):
         """Load configuration from INI file"""
         config = configparser.ConfigParser()
         
         # Defaults
+        config['ollama'] = {
+            'ollama_host': 'local',
+            'network_vision_model': 'moondream',
+            'network_timeout': '5'
+        }
         config['llm'] = {
             'system_prompt': 'You are a helpful robot. Answer in 1 sentence maximum. Be direct and concise.',
             'text_model': 'llama3.2:1b',
@@ -415,26 +437,80 @@ class AIChatBot:
         self.set_state(State.ANSWERING)
         self.update_display("answering", "🤔 Analyzing image...")
         
+        # Use consistent prompt for length control
+        prompt = "Describe this image. Keep the answer to maximum 1 or 2 sentences."
+        description = None
+        
         try:
-            # Use Ollama for vision with concise prompt
-            vision_model = self.config['llm']['vision_model']
-            response = ollama.chat(
-                model=vision_model,
-                messages=[
-                    {
-                        'role': 'user',
-                        'content': 'Describe what you see in this image.',
-                        'images': [image_path]
+            # Try network Ollama first if configured
+            if self.use_network_ollama:
+                vision_model = self.config['ollama']['network_vision_model']
+                timeout = int(self.config['ollama']['network_timeout'])
+                
+                self.log(f"Trying network Ollama with model: {vision_model}")
+                
+                try:
+                    response = self.ollama_client.chat(
+                        model=vision_model,
+                        messages=[
+                            {
+                                'role': 'user',
+                                'content': prompt,
+                                'images': [image_path]
+                            }
+                        ],
+                        options={
+                            'num_ctx': 2048,
+                            'temperature': 0.7
+                        }
+                    )
+                    description = response['message']['content'].strip()
+                    self.log(f"Network Ollama success: {description[:50]}...")
+                    
+                except (ConnectionError, TimeoutError, Exception) as network_error:
+                    # Network failed, fall back to local
+                    self.log(f"Network Ollama failed: {network_error}", "WARN")
+                    self.log("Falling back to local Ollama...", "WARN")
+                    
+                    # Use local moondream as fallback
+                    vision_model = self.config['llm']['vision_model']
+                    response = ollama.chat(
+                        model=vision_model,
+                        messages=[
+                            {
+                                'role': 'user',
+                                'content': prompt,
+                                'images': [image_path]
+                            }
+                        ],
+                        options={
+                            'num_ctx': 2048,
+                            'temperature': 0.7
+                        }
+                    )
+                    description = response['message']['content'].strip()
+                    self.log(f"Local Ollama fallback success: {description[:50]}...")
+            else:
+                # Use local Ollama directly
+                vision_model = self.config['llm']['vision_model']
+                self.log(f"Using local Ollama with model: {vision_model}")
+                
+                response = ollama.chat(
+                    model=vision_model,
+                    messages=[
+                        {
+                            'role': 'user',
+                            'content': prompt,
+                            'images': [image_path]
+                        }
+                    ],
+                    options={
+                        'num_ctx': 2048,
+                        'temperature': 0.7
                     }
-                ],
-                options={
-                    'num_ctx': 2048,
-                    'temperature': 0.7
-                    # No num_predict limit - moondream needs full context for accurate descriptions
-                }
-            )
-            
-            description = response['message']['content'].strip()
+                )
+                description = response['message']['content'].strip()
+                self.log(f"Local Ollama success: {description[:50]}...")
             
             if description:
                 self.log(f"Image description: {description}")
@@ -533,7 +609,12 @@ class AIChatBot:
         self.log("AI Chatbot service started")
         self.log(f"ASR: VOSK (model: {VOSK_MODEL_PATH})")
         self.log(f"Text LLM: {self.config['llm']['text_model']}")
-        self.log(f"Vision LLM: {self.config['llm']['vision_model']}")
+        
+        if self.use_network_ollama:
+            self.log(f"Vision LLM: {self.config['ollama']['network_vision_model']} (network) with fallback to {self.config['llm']['vision_model']} (local)")
+            self.log(f"Network Ollama: {self.config['ollama']['ollama_host']}")
+        else:
+            self.log(f"Vision LLM: {self.config['llm']['vision_model']} (local)")
         
         # Setup signal handlers
         signal.signal(signal.SIGTERM, lambda s, f: self.cleanup() or sys.exit(0))
