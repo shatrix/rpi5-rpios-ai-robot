@@ -32,7 +32,7 @@ BUTTON_QUESTIONS = {
     "K1": "Voice Chat (Hold to Speak)",
     "K2": None,
     "K3": "Camera Vision",
-    "K4": None,  # Cancel/Stop button
+    "K4": None,  # Fun sound button
     "K8": None,
 }
 
@@ -47,7 +47,7 @@ k1_is_recording = False
 
 # Track which buttons have active threads running
 # Only track K1 (long-running LLM task)
-# K3/K2 are fire-and-forget, K4 is cancel, K8 is shutdown
+# K2/K3/K4 are fire-and-forget TTS, K8 is shutdown
 active_threads = {
     "K1": False,
 }
@@ -77,52 +77,6 @@ def send_ai_command(command):
         display_print(f"[AI] Error communicating with chatbot: {e}")
         return None
 
-
-def stop_all_activities():
-    """Stop all running llama-ask and speak processes"""
-    display_print("\n" + "━" * 60)
-    display_print("[CANCEL] Stopping all activities...")
-    
-    # Kill all llama-ask processes (client-side only, leave server running)
-    try:
-        subprocess.run(["pkill", "-9", "llama-ask"], 
-                       stderr=subprocess.DEVNULL,
-                       stdout=subprocess.DEVNULL)
-    except Exception:
-        pass
-    
-    # Kill all speak/piper processes
-    try:
-        subprocess.run(["pkill", "-9", "speak"], 
-                       stderr=subprocess.DEVNULL,
-                       stdout=subprocess.DEVNULL)
-    except Exception:
-        pass
-    
-    try:
-        subprocess.run(["pkill", "-9", "piper"], 
-                       stderr=subprocess.DEVNULL,
-                       stdout=subprocess.DEVNULL)
-    except Exception:
-        pass
-    
-    # Kill audio playback processes (aplay, mpg123, etc.)
-    try:
-        subprocess.run(["pkill", "-9", "aplay"], 
-                       stderr=subprocess.DEVNULL,
-                       stdout=subprocess.DEVNULL)
-    except Exception:
-        pass
-    
-    try:
-        subprocess.run(["pkill", "-9", "mpg123"], 
-                       stderr=subprocess.DEVNULL,
-                       stdout=subprocess.DEVNULL)
-    except Exception:
-        pass
-    
-    display_print("[CANCEL] All activities stopped.")
-    display_print("━" * 60 + "\n")
 
 
 def _handle_button_press_impl(button_name, event_type):
@@ -168,17 +122,21 @@ def _handle_button_press_impl(button_name, event_type):
             display_print("[K8] System shutdown initiated...")
             subprocess.Popen([
                 "speak",
-                "System is shutting down in 3 2 1"
+                "System is shutting down in 3 2 1  "
             ]).wait()  # Wait for TTS to complete
             display_print("[K8] Shutting down now...")
             subprocess.run(["shutdown", "-h", "now"])
             return
 
         # ----------------------------------------------
-        # K4: CANCEL
+        # K4: FUN SOUND
         # ----------------------------------------------
         if button_name == "K4":
-            stop_all_activities()
+            display_print("[K4] Playing fun sound...")
+            subprocess.Popen([
+                "speak",
+                "zoozoo haii yaii yaii"
+            ])
             return
 
         # ----------------------------------------------
@@ -200,13 +158,6 @@ def _handle_button_press_impl(button_name, event_type):
 
 def handle_button_press(button_name, event_type):
     """Handle a button press event by launching it in a separate thread"""
-    
-    # Check if this button already has an active thread running
-    # K1 is allowed to re-enter for Release event
-    if button_name != "K1" and button_name in active_threads and active_threads[button_name]:
-        display_print(f"[{button_name}] Already running - restarting...")
-        stop_all_activities()  # Kill everything
-        time.sleep(0.5)  # Longer pause to ensure cleanup
     
     # Mark this button as active (before starting thread)
     if button_name in active_threads:

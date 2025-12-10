@@ -6,6 +6,12 @@
 
 set -e
 
+# Parse arguments
+RECONFIGURE=false
+if [ "$1" = "--reconfigure" ]; then
+    RECONFIGURE=true
+fi
+
 echo "=== Ollama Configuration ==="
 
 # Configuration
@@ -15,40 +21,60 @@ CONFIG_DIR="/etc/ai-chatbot"
 # Ensure config directory exists
 mkdir -p "$CONFIG_DIR"
 
-# Prompt for Ollama configuration
-echo ""
-echo "Choose Ollama setup for vision processing:"
-echo "  1) Local Ollama (RPi5, ~60s per image with moondream)"
-echo "  2) Network Ollama (faster GPU server, ~2s per image)"
-echo ""
-read -p "Enter choice [1/2] (default: 1): " OLLAMA_CHOICE
-OLLAMA_CHOICE=${OLLAMA_CHOICE:-1}
-
-OLLAMA_HOST="local"
-NETWORK_MODEL="moondream"
-
-if [ "$OLLAMA_CHOICE" = "2" ]; then
+# Check if configuration already exists
+if [ -f "$CONFIG_FILE" ] && [ "$RECONFIGURE" = false ]; then
     echo ""
-    read -p "Enter network Ollama server IP address: " OLLAMA_IP
-    read -p "Enter network Ollama server port (default: 11434): " OLLAMA_PORT
-    OLLAMA_PORT=${OLLAMA_PORT:-11434}
-    read -p "Enter vision model name on network server (e.g., qwen3-vl): " NETWORK_MODEL
-    
-    OLLAMA_HOST="${OLLAMA_IP}:${OLLAMA_PORT}"
-    
+    echo "✓ Configuration file already exists: $CONFIG_FILE"
     echo ""
-    echo "✓ Network Ollama configured:"
-    echo "  Host: $OLLAMA_HOST"
-    echo "  Vision Model: $NETWORK_MODEL"
+    echo "Current Ollama configuration:"
+    grep "ollama_host" "$CONFIG_FILE" || echo "  (unable to read config)"
+    grep "network_vision_model" "$CONFIG_FILE" || echo ""
+    echo ""
+    echo "To reconfigure, run: sudo ./setup.sh --reconfigure"
+    echo "Skipping configuration prompts..."
+    echo ""
+    
+    # Continue to Ollama installation check
+    SKIP_CONFIG=true
 else
-    echo "✓ Using local Ollama"
+    SKIP_CONFIG=false
 fi
 
-# Generate/update configuration file
-echo ""
-echo "→ Updating configuration file: $CONFIG_FILE"
-
-cat > "$CONFIG_FILE" << EOF
+if [ "$SKIP_CONFIG" = false ]; then
+    # Prompt for Ollama configuration
+    echo ""
+    echo "Choose Ollama setup for vision processing:"
+    echo "  1) Local Ollama (RPi5, ~60s per image with moondream)"
+    echo "  2) Network Ollama (faster GPU server, ~2s per image)"
+    echo ""
+    read -p "Enter choice [1/2] (default: 1): " OLLAMA_CHOICE
+    OLLAMA_CHOICE=${OLLAMA_CHOICE:-1}
+    
+    OLLAMA_HOST="local"
+    NETWORK_MODEL="moondream"
+    
+    if [ "$OLLAMA_CHOICE" = "2" ]; then
+        echo ""
+        read -p "Enter network Ollama server IP address: " OLLAMA_IP
+        read -p "Enter network Ollama server port (default: 11434): " OLLAMA_PORT
+        OLLAMA_PORT=${OLLAMA_PORT:-11434}
+        read -p "Enter vision model name on network server (e.g., qwen3-vl): " NETWORK_MODEL
+        
+        OLLAMA_HOST="${OLLAMA_IP}:${OLLAMA_PORT}"
+        
+        echo ""
+        echo "✓ Network Ollama configured:"
+        echo "  Host: $OLLAMA_HOST"
+        echo "  Vision Model: $NETWORK_MODEL"
+    else
+        echo "✓ Using local Ollama"
+    fi
+    
+    # Generate/update configuration file
+    echo ""
+    echo "→ Updating configuration file: $CONFIG_FILE"
+    
+    cat > "$CONFIG_FILE" << EOF
 [ollama]
 # Ollama server configuration
 # Use 'local' for local Ollama server, or 'IP:PORT' for network server
@@ -88,9 +114,19 @@ resolution = 640x480
 chat_history_timeout = 300
 max_history_messages = 10
 EOF
+    
+    chmod 644 "$CONFIG_FILE"
+    echo "✓ Configuration saved to $CONFIG_FILE"
+else
+    # Read existing config to determine if we should skip local Ollama install
+    OLLAMA_CHOICE="1"  # Default to local
+    if grep -q "ollama_host = local" "$CONFIG_FILE" 2>/dev/null; then
+        OLLAMA_CHOICE="1"
+    else
+        OLLAMA_CHOICE="2"
+    fi
+fi
 
-chmod 644 "$CONFIG_FILE"
-echo "✓ Configuration saved to $CONFIG_FILE"
 
 # Skip local Ollama installation if using network server
 if [ "$OLLAMA_CHOICE" = "2" ]; then
