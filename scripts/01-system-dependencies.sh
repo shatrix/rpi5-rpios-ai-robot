@@ -1,7 +1,7 @@
 #!/bin/bash
 ################################################################################
 # 01: System Dependencies
-# Install all required system packages
+# Install all required system packages (bilingual support)
 ################################################################################
 
 set -e
@@ -46,8 +46,19 @@ apt install -y \
     unzip \
     systemd
 
-echo "→ Installing espeak-ng data (for Piper)..."
-apt install -y espeak-ng-data
+echo "→ Installing bilingual TTS support..."
+# espeak-ng-data for Piper (English)
+# espeak-ng for Arabic TTS (ARM ONNX workaround)
+apt install -y \
+    espeak-ng-data \
+    espeak-ng \
+    libespeak-ng1
 
-echo "✓ All system dependencies installed"
+echo "→ Installing Arabic fonts..."
+# Google Noto fonts for better Arabic rendering in QML
+apt install -y \
+    fonts-noto-core \
+    fonts-noto-ui-core
+
+echo "✓ All system dependencies installed (bilingual support enabled)"
 exit 0

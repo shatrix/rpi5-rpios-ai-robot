@@ -4,6 +4,7 @@ After=network.target
 
 [Service]
 Type=simple
+ExecStartPre=/usr/bin/python3 /usr/local/bin/set-display-language.py
 ExecStart=/usr/local/bin/shatrox-display-start
 Restart=always
 RestartSec=3s

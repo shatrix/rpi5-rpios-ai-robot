@@ -1,7 +1,7 @@
 #!/bin/bash
 ################################################################################
 # 09: Download Ollama Models
-# Download Llama 3.2:1b and Moondream models via Ollama
+# Download English + Arabic text models and Moondream vision model
 ################################################################################
 
 set -e
@@ -28,19 +28,29 @@ fi
 
 echo "✓ Ollama service ready"
 
-# Pull text model (Llama 3.2:1b)
-echo "→ Pulling Llama 3.2:1b text model (~1GB)..."
+# Pull English text model (Llama 3.2:1b)
+echo "→ Pulling Llama 3.2:1b (English) text model (~1GB)..."
 echo "   This may take 5-15 minutes depending on internet speed..."
 if ollama list | grep -q "llama3.2:1b"; then
-    echo "⚠️  Text model already downloaded, skipping..."
+    echo "⚠️  English text model already downloaded, skipping..."
 else
     ollama pull llama3.2:1b
-    echo "✓ Text model downloaded"
+    echo "✓ English text model downloaded"
 fi
 
-# Pull vision model (Moondream)
-echo "→ Pulling Moondream vision model (~1.7GB)..."
+# Pull Arabic text model (prakasharyan/qwen-arabic)
+echo "→ Pulling prakasharyan/qwen-arabic (Arabic) text model (~1.5GB)..."
 echo "   This may take 5-15 minutes depending on internet speed..."
+if ollama list | grep -q "prakasharyan/qwen-arabic"; then
+    echo "⚠️  Arabic text model already downloaded, skipping..."
+else
+    ollama pull prakasharyan/qwen-arabic
+    echo "✓ Arabic text model downloaded"
+fi
+
+# Pull vision model (Moondream - language agnostic)
+echo "→ Pulling Moondream vision model (~1.7GB)..."
+echo "   This may may take 5-15 minutes depending on internet speed..."
 if ollama list | grep -q "moondream"; then
     echo "⚠️  Vision model already downloaded, skipping..."
 else
@@ -57,8 +67,13 @@ echo ""
 echo "✓ All models downloaded successfully!"
 echo ""
 echo "  Available models:"
-echo "    - llama3.2:1b (text chat, ~1GB)"
-echo "    - moondream (vision, ~1.7GB, uses ~2.6GB RAM)"
+echo "    - llama3.2:1b (English text chat, ~1GB)"
+echo "    - prakasharyan/qwen-arabic (Arabic text chat, ~1.5GB)"
+echo "    - moondream (vision, ~1.7GB, language-agnostic)"
+echo ""
+echo "  Language selection:"
+echo "    Configure in /etc/ai-chatbot/language.conf"
+echo "    Or switch language anytime and restart services"
 echo ""
 
 exit 0

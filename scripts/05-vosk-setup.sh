@@ -1,7 +1,8 @@
 #!/bin/bash
 ################################################################################
 # 05: VOSK Setup
-# Install VOSK Python package and download English model
+# Install VOSK Python package and download English + Arabic models
+# User selects preferred language during setup
 ################################################################################
 
 set -e
@@ -24,46 +25,112 @@ echo "✓ VOSK Python package installed"
 MODEL_DIR="/usr/share/vosk-models"
 mkdir -p "$MODEL_DIR"
 
-# Download small English model (vosk-model-small-en-us-0.15)
-MODEL_NAME="vosk-model-small-en-us-0.15"
-MODEL_ZIP="${MODEL_NAME}.zip"
-MODEL_URL="https://alphacephei.com/vosk/models/${MODEL_ZIP}"
-
-if [ -d "$MODEL_DIR/$MODEL_NAME" ]; then
-    echo "⚠️  VOSK model already downloaded, skipping..."
+# Language selection prompt (if not already configured)
+if [ ! -f "/etc/ai-chatbot/language.conf" ]; then
+    echo ""
+    echo "═══════════════════════════════════════"
+    echo "   Language Selection"
+    echo "═══════════════════════════════════════"
+    echo ""
+    echo "Which language would you like to use?"
+    echo "  1) English (en)"
+    echo "  2) Arabic (ar) - العربية"
+    echo ""
+    read -p "Enter choice [1-2]: " lang_choice
+    
+    case $lang_choice in
+        1) ROBOT_LANGUAGE="en" ;;
+        2) ROBOT_LANGUAGE="ar" ;;
+        *) echo "Invalid choice, defaulting to English"; ROBOT_LANGUAGE="en" ;;
+    esac
+    
+    # Save choice to config
+    mkdir -p /etc/ai-chatbot
+    echo "LANGUAGE=$ROBOT_LANGUAGE" > /etc/ai-chatbot/language.conf
+    echo "✓ Language set to: $ROBOT_LANGUAGE"
 else
-    echo "→ Downloading VOSK English model (~40MB)..."
-    echo "   URL: $MODEL_URL"
-    
-    cd /tmp
-    wget -q --show-progress "$MODEL_URL"
-    
-    echo "→ Extracting model..."
-    unzip -q "$MODEL_ZIP"
-    
-    echo "→ Installing model to $MODEL_DIR..."
-    mv "$MODEL_NAME" "$MODEL_DIR/"
-    
-    # Cleanup
-    rm "$MODEL_ZIP"
-    
-    echo "✓ VOSK model installed"
+    # Load existing language choice
+    ROBOT_LANGUAGE=$(grep "^LANGUAGE=" /etc/ai-chatbot/language.conf | cut -d= -f2)
+    echo "✓ Using existing language: $ROBOT_LANGUAGE"
 fi
 
-# Create symlink for easy access
-ln -sf "$MODEL_DIR/$MODEL_NAME" "$MODEL_DIR/default"
+echo ""
+echo "→ Downloading BOTH English and Arabic models for flexibility..."
+echo ""
+
+# Download English model (vosk-model-small-en-us-0.15)
+EN_MODEL_NAME="vosk-model-small-en-us-0.15"
+EN_MODEL_ZIP="${EN_MODEL_NAME}.zip"
+EN_MODEL_URL="https://alphacephei.com/vosk/models/${EN_MODEL_ZIP}"
+
+if [ -d "$MODEL_DIR/$EN_MODEL_NAME" ]; then
+    echo "⚠️  English VOSK model already downloaded, skipping..."
+else
+    echo "→ Downloading VOSK English model (~40MB)..."
+    echo "   URL: $EN_MODEL_URL"
+    
+    cd /tmp
+    wget -q --show-progress "$EN_MODEL_URL"
+    
+    echo "→ Extracting English model..."
+    unzip -q "$EN_MODEL_ZIP"
+    
+    echo "→ Installing English model to $MODEL_DIR..."
+    mv "$EN_MODEL_NAME" "$MODEL_DIR/"
+    
+    # Cleanup
+    rm "$EN_MODEL_ZIP"
+    
+    echo "✓ English VOSK model installed"
+fi
+
+# Download Arabic model (vosk-model-ar-mgb2-0.4)
+AR_MODEL_NAME="vosk-model-ar-mgb2-0.4"
+AR_MODEL_ZIP="${AR_MODEL_NAME}.zip"
+AR_MODEL_URL="https://alphacephei.com/vosk/models/${AR_MODEL_ZIP}"
+
+if [ -d "$MODEL_DIR/$AR_MODEL_NAME" ]; then
+    echo "⚠️  Arabic VOSK model already downloaded, skipping..."
+else
+    echo "→ Downloading VOSK Arabic model (~318MB)..."
+    echo "   URL: $AR_MODEL_URL"
+    
+    cd /tmp
+    wget -q --show-progress "$AR_MODEL_URL"
+    
+    echo "→ Extracting Arabic model..."
+    unzip -q "$AR_MODEL_ZIP"
+    
+    echo "→ Installing Arabic model to $MODEL_DIR..."
+    mv "$AR_MODEL_NAME" "$MODEL_DIR/"
+    
+    # Cleanup
+    rm "$AR_MODEL_ZIP"
+    
+    echo "✓ Arabic VOSK model installed"
+fi
+
+# Create symlink to selected language model
+if [ "$ROBOT_LANGUAGE" = "ar" ]; then
+    ln -sf "$MODEL_DIR/$AR_MODEL_NAME" "$MODEL_DIR/default"
+    ACTIVE_MODEL="$AR_MODEL_NAME (Arabic)"
+else
+    ln -sf "$MODEL_DIR/$EN_MODEL_NAME" "$MODEL_DIR/default"
+    ACTIVE_MODEL="$EN_MODEL_NAME (English)"
+fi
 
 # Verify model
 if [ ! -d "$MODEL_DIR/default" ]; then
-    echo "❌ ERROR: VOSK model not found!"
+    echo "❌ ERROR: VOSK model symlink creation failed!"
     exit 1
 fi
 
-echo "✓ VOSK model verified: $MODEL_DIR/default"
+echo "✓ Active model: $ACTIVE_MODEL"
+echo "✓ Model path: $MODEL_DIR/default"
 
-# Create wrapper script for compatibility (AI chatbot will use Python API directly)
+# Create wrapper script for compatibility
 echo "→ Creating vosk-transcribe wrapper script..."
-cat > /usr/local/bin/vosk-transcribe << 'EOF'
+cat > /usr/local/bin/vosk-transcribe <<'EOF'
 #!/usr/bin/env python3
 """
 VOSK transcription wrapper
@@ -114,16 +181,15 @@ echo "✓ vosk-transcribe wrapper created"
 
 echo ""
 echo "  VOSK ASR installed:"
-echo "    Model: vosk-model-small-en-us-0.15 (40MB, WER ~9.85%)"
+echo "    English model: vosk-model-small-en-us-0.15 (40MB, WER ~9.85%)"
+echo "    Arabic model: vosk-model-ar-mgb2-0.4 (318MB, WER ~16.4%)"
+echo "    Active: $ACTIVE_MODEL"
 echo "    Path: $MODEL_DIR/default"
 echo "    Wrapper: /usr/local/bin/vosk-transcribe"
 echo ""
-echo "  To upgrade to larger model (better accuracy, more RAM):"
-echo "    wget https://alphacephei.com/vosk/models/vosk-model-en-us-0.22.zip"
-echo "    unzip vosk-model-en-us-0.22.zip"
-echo "    sudo rm -rf $MODEL_DIR/vosk-model-small-en-us-0.15"
-echo "    sudo mv vosk-model-en-us-0.22 $MODEL_DIR/"
-echo "    sudo ln -sf $MODEL_DIR/vosk-model-en-us-0.22 $MODEL_DIR/default"
+echo "  To switch language after setup:"
+echo "    Edit /etc/ai-chatbot/language.conf"
+echo "    Then restart: sudo systemctl restart ai-chatbot shatrox-buttons"
 echo ""
 
 exit 0

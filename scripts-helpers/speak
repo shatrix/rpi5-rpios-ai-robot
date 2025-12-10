@@ -1,12 +1,20 @@
 #!/bin/bash
 ################################################################################
-# speak - Text-to-speech wrapper using Piper neural TTS
+# speak - Text-to-speech wrapper
+# Uses Piper for English, espeak for Arabic (ARM ONNX workaround)
 ################################################################################
 
 # Check if text provided
 if [ $# -eq 0 ]; then
     echo "Usage: speak \"text to speak\""
     exit 1
+fi
+
+# Load language configuration (default to English)
+if [ -f "/etc/ai-chatbot/language.conf" ]; then
+    LANG=$(grep "^LANGUAGE=" /etc/ai-chatbot/language.conf | cut -d= -f2)
+else
+    LANG="en"
 fi
 
 # Get audio device
@@ -16,15 +24,24 @@ if [ -z "$AUDIO_DEVICE" ]; then
     exit 1
 fi
 
-# Voice model location
-VOICE_MODEL="/usr/share/piper-voices/default.onnx"
-
-if [ ! -f "$VOICE_MODEL" ]; then
-    echo "Error: Voice model not found at $VOICE_MODEL"
-    exit 1
+# Use different TTS engine based on language
+if [ "$LANG" = "ar" ]; then
+    # Use espeak-ng for Arabic (Piper Arabic voice has ARM ONNX incompatibility)
+    espeak-ng -v Arabic -s 150 "$1" --stdout | aplay -D "$AUDIO_DEVICE" 2>/dev/null
+else
+    # Use Piper for English
+    VOICE_MODEL="/usr/share/piper-voices/en_US-ryan-medium.onnx"
+    
+    if [ ! -f "$VOICE_MODEL" ]; then
+        echo "Error: Voice model not found at $VOICE_MODEL"
+        exit 1
+    fi
+    
+    # Use temp file to avoid ONNX fd issue
+    TEMP_WAV="/tmp/piper-speak-$$.wav"
+    echo "$1" | piper --model "$VOICE_MODEL" --output_file "$TEMP_WAV" 2>/dev/null
+    aplay -D "$AUDIO_DEVICE" "$TEMP_WAV" 2>/dev/null
+    rm -f "$TEMP_WAV"
 fi
-
-# Use Piper for TTS and play through aplay
-echo "$1" | piper --model "$VOICE_MODEL" --output_file - | aplay -D "$AUDIO_DEVICE" 2>/dev/null
 
 exit 0

@@ -12,22 +12,39 @@ Automated setup to replicate a Yocto-based AI robot system on Raspberry Pi OS (D
 - **Storage:** 16GB+ SD card or NVMe SSD (32GB+ recommended for models)
 - **Cooling:** Official RPi 5 Active Cooler (recommended)
 
+## Language Support
+
+**Bilingual System:** Supports both English and Modern Standard Arabic (MSA)
+
+- **English:** Full support with Piper neural TTS (high quality)
+- **Arabic (العربية):** Full support with espeak-ng TTS
+- **Language Selection:** Choose during setup or switch anytime via `/etc/ai-chatbot/language.conf`
+- **Robot Name:** "Ruby" (English) / "روبي" (Rubi in Arabic)
+
+**Arabic Components:**
+- ASR: VOSK `ar-mgb2` (offline speech recognition)
+- LLM: `prakasharyan/qwen-arabic` (Arabic language model)
+- TTS: espeak-ng `Arabic` voice (ARM-compatible)
+- Commands: Bilingual regex patterns for volume, time, date, camera, shutdown
+
+> **Note:** Arabic TTS uses espeak-ng due to ARM ONNX Runtime incompatibility with Piper's Arabic voice model.
+
 ## Features
 
-- **Voice Chat:** Hold K1 button to speak, release to get AI response
-- **AI Voice Commands:** Natural language system control via K1 button
-  - Volume control: "set volume to 50%", "change volume too seventy" (handles ASR errors)
-  - Time/Date queries: "what time is it?", "what's the date?"
-  - Camera trigger: "take a picture"
-  - System control: "shutdown system"
-  - Two-stage detection prevents false positives and JSON confusion
+- **Voice Chat:** Hold K1 button to speak, release to get AI response (English or Arabic)
+- **AI Voice Commands:** Natural language system control via K1 button (bilingual)
+  - Volume: "set volume to 50%" / "اضبط الصوت على خمسين"
+  - Time: "what time is it?" / "ما هو الوقت؟"
+  - Date: "what's the date?" / "ما هو التاريخ؟"
+  - Camera: "take a picture" / "التقط صورة"
+  - Shutdown: "shutdown system" / "أطفئ النظام"
 - **Camera Vision:** Press K3 to capture and describe what the camera sees
-- **Text-to-Speech:** Natural-sounding Piper neural TTS
-- **Speech Recognition:** Offline VOSK ASR (no internet required after setup)
-- **LLM:** Ollama with Llama 3.2:1b (text) and Moondream/qwen3-vl (vision) models
-  - **Local Mode:** All processing on RPi5 (fully offline)
-  - **Network Mode:** Optional network GPU server for 30x faster vision (2s vs 60s)
-  - **Auto-Fallback:** Automatic fallback to local on network failure
+- **Text-to-Speech:** Piper neural TTS (English) or espeak-ng (Arabic)
+- **Speech Recognition:** Offline VOSK ASR (English or Arabic models)
+- **LLM:** Ollama with language-appropriate models
+  - English: `llama3.2:1b` (text)
+  - Arabic: `prakasharyan/qwen-arabic` (text)
+  - Vision: `moondream` (local) or `qwen3-vl` (network GPU server)
 - **Robot Face GUI:** QML-based display with animated eyes, touch interaction
 - **Flexible Deployment:** Choose between fully offline or network-accelerated vision
 

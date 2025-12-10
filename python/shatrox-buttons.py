@@ -2,6 +2,7 @@
 """
 SHATROX Button Monitor Service
 Monitors 8 GPIO buttons and triggers LLM queries with TTS responses
+Supports bilingual operation (English and Arabic)
 """
 
 import gpiod
@@ -41,6 +42,35 @@ CHIP_PATH = "/dev/gpiochip4"  # RPi 5 on Raspberry Pi OS uses gpiochip4
 DEBOUNCE_MS = 50  # 50ms is sufficient for mechanical bounce, 200ms is too long for quick clicks
 DISPLAY_LOG = "/tmp/shatrox-display.log"
 AI_CHATBOT_SOCKET = "/tmp/ai-chatbot.sock"
+
+# Load language configuration
+LANGUAGE = 'en'  # Default to English
+LANG_CONFIG_FILE = '/etc/ai-chatbot/language.conf'
+if os.path.exists(LANG_CONFIG_FILE):
+    try:
+        with open(LANG_CONFIG_FILE, 'r') as f:
+            for line in f:
+                if line.startswith('LANGUAGE='):
+                    LANGUAGE = line.split('=')[1].strip()
+                    break
+    except Exception:
+        pass  # Keep default
+
+# Bilingual button messages
+BUTTON_STRINGS = {
+    'en': {
+        'greeting': "Hi, I'm Ruby — an AI-powered robot here to answer your questions",
+        'shutdown': "System is shutting down in 3 2 1"
+    },
+    'ar': {
+        'greeting': "مرحباً، أنا روبي — روبوت ذكي هنا للإجابة على أسئلتك",
+        'shutdown': "إيقاف تشغيل النظام في ٣ ٢ ١"
+    }
+}
+
+def get_button_string(key):
+    """Get localized button string"""
+    return BUTTON_STRINGS.get(LANGUAGE, BUTTON_STRINGS['en']).get(key, '')
 
 last_press_time = {}
 k1_is_recording = False
@@ -129,7 +159,7 @@ def _handle_button_press_impl(button_name, event_type):
             display_print("[K8] System shutdown initiated...")
             subprocess.Popen([
                 "speak",
-                "System is shutting down in 3 2 1  "
+                get_button_string('shutdown')
             ]).wait()  # Wait for TTS to complete
             display_print("[K8] Shutting down now...")
             subprocess.run(["shutdown", "-h", "now"])
@@ -153,7 +183,7 @@ def _handle_button_press_impl(button_name, event_type):
             display_print("[K2] Speaking greeting message...")
             subprocess.Popen([
                 "speak",
-                "Hi, I'm Ruby — an AI-powered robot here to answer your questions"
+                get_button_string('greeting')
             ])
             return
 

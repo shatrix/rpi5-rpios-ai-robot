@@ -1,7 +1,7 @@
 #!/bin/bash
 ################################################################################
 # 06: Piper TTS Setup
-# Install Piper binary and voice models
+# Install Piper binary and download English + Arabic voice models
 ################################################################################
 
 set -e
@@ -59,44 +59,61 @@ echo "✓ Piper verified: $(/usr/local/bin/piper --version 2>&1 | head -1)"
 # Create voices directory
 mkdir -p "$VOICES_DIR"
 
-# Download voice models
-echo "→ Downloading Piper voice models..."
-
-# Voice 1: en_US-ryan-medium (male, natural)
-RYAN_BASE="en_US-ryan-medium"
-if [ ! -f "$VOICES_DIR/${RYAN_BASE}.onnx" ]; then
-    echo "   Downloading ${RYAN_BASE} voice..."
-    wget -q --show-progress \
-        "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/ryan/medium/${RYAN_BASE}.onnx" \
-        -O "$VOICES_DIR/${RYAN_BASE}.onnx"
-    wget -q \
-        "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/ryan/medium/${RYAN_BASE}.onnx.json" \
-        -O "$VOICES_DIR/${RYAN_BASE}.onnx.json"
-    echo "   ✓ ${RYAN_BASE} downloaded"
+# Load language preference (default to English if not set)
+if [ -f "/etc/ai-chatbot/language.conf" ]; then
+    ROBOT_LANGUAGE=$(grep "^LANGUAGE=" /etc/ai-chatbot/language.conf | cut -d= -f2)
 else
-    echo "   ⚠️  ${RYAN_BASE} already exists, skipping..."
+    ROBOT_LANGUAGE="en"
 fi
 
-# Voice 2: en_US-lessac-medium (male, clear)
-LESSAC_BASE="en_US-lessac-medium"
-if [ ! -f "$VOICES_DIR/${LESSAC_BASE}.onnx" ]; then
-    echo "   Downloading ${LESSAC_BASE} voice..."
+echo "→ Downloading voice models for both English and Arabic..."
+echo ""
+
+# Voice 1: en_US-ryan-medium (English male, natural)
+EN_VOICE_BASE="en_US-ryan-medium"
+EN_VOICE_URL="https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/ryan/medium"
+if [ ! -f "$VOICES_DIR/${EN_VOICE_BASE}.onnx" ]; then
+    echo "   Downloading ${EN_VOICE_BASE} voice..."
     wget -q --show-progress \
-        "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/medium/${LESSAC_BASE}.onnx" \
-        -O "$VOICES_DIR/${LESSAC_BASE}.onnx"
+        "${EN_VOICE_URL}/${EN_VOICE_BASE}.onnx" \
+        -O "$VOICES_DIR/${EN_VOICE_BASE}.onnx"
     wget -q \
-        "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/medium/${LESSAC_BASE}.onnx.json" \
-        -O "$VOICES_DIR/${LESSAC_BASE}.onnx.json"
-    echo "   ✓ ${LESSAC_BASE} downloaded"
+        "${EN_VOICE_URL}/${EN_VOICE_BASE}.onnx.json" \
+        -O "$VOICES_DIR/${EN_VOICE_BASE}.onnx.json"
+    echo "   ✓ ${EN_VOICE_BASE} downloaded"
 else
-    echo "   ⚠️  ${LESSAC_BASE} already exists, skipping..."
+    echo "   ⚠️  ${EN_VOICE_BASE} already exists, skipping..."
 fi
 
-# Create default symlink (ryan as default)
-ln -sf "${RYAN_BASE}.onnx" "$VOICES_DIR/default.onnx"
-ln -sf "${RYAN_BASE}.onnx.json" "$VOICES_DIR/default.onnx.json"
+# Voice 2: ar_JO-kareem-medium (Arabic male)
+AR_VOICE_BASE="ar_JO-kareem-medium"
+AR_VOICE_URL="https://huggingface.co/rhasspy/piper-voices/resolve/main/ar/ar_JO/kareem/medium"
+if [ ! -f "$VOICES_DIR/${AR_VOICE_BASE}.onnx" ]; then
+    echo "   Downloading ${AR_VOICE_BASE} voice..."
+    wget -q --show-progress \
+        "${AR_VOICE_URL}/${AR_VOICE_BASE}.onnx" \
+        -O "$VOICES_DIR/${AR_VOICE_BASE}.onnx"
+    wget -q \
+        "${AR_VOICE_URL}/${AR_VOICE_BASE}.onnx.json" \
+        -O "$VOICES_DIR/${AR_VOICE_BASE}.onnx.json"
+    echo "   ✓ ${AR_VOICE_BASE} downloaded"
+else
+    echo "   ⚠️  ${AR_VOICE_BASE} already exists, skipping..."
+fi
+
+# Create default symlink based on language preference
+if [ "$ROBOT_LANGUAGE" = "ar" ]; then
+    ln -sf "${AR_VOICE_BASE}.onnx" "$VOICES_DIR/default.onnx"
+    ln -sf "${AR_VOICE_BASE}.onnx.json" "$VOICES_DIR/default.onnx.json"
+    DEFAULT_VOICE="$AR_VOICE_BASE (Arabic)"
+else
+    ln -sf "${EN_VOICE_BASE}.onnx" "$VOICES_DIR/default.onnx"
+    ln -sf "${EN_VOICE_BASE}.onnx.json" "$VOICES_DIR/default.onnx.json"
+    DEFAULT_VOICE="$EN_VOICE_BASE (English)"
+fi
 
 echo "✓ Voice models installed"
+echo "✓ Default voice: $DEFAULT_VOICE"
 
 # Test Piper
 echo "→ Testing Piper TTS..."
@@ -112,11 +129,13 @@ echo ""
 echo "  Piper TTS installed:"
 echo "    Binary: /usr/local/bin/piper"
 echo "    Voices: $VOICES_DIR"
-echo "    Default: ryan-medium (male, natural)"
+echo "    English voice: en_US-ryan-medium (male, natural)"
+echo "    Arabic voice: ar_JO-kareem-medium (male)"
+echo "    Default: $DEFAULT_VOICE"
 echo ""
-echo "  Available voices:"
-echo "    - en_US-ryan-medium (default)"
-echo "    - en_US-lessac-medium"
+echo "  To switch language after setup:"
+echo "    Edit /etc/ai-chatbot/language.conf"
+echo "    Then restart: sudo systemctl restart ai-chatbot shatrox-buttons"
 echo ""
 
 exit 0

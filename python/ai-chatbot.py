@@ -113,7 +113,25 @@ class AIChatBot:
         """Load configuration from INI file"""
         config = configparser.ConfigParser()
         
-        # Defaults
+        # Load language preference
+        language = 'en'  # Default
+        lang_file = '/etc/ai-chatbot/language.conf'
+        if os.path.exists(lang_file):
+            try:
+                with open(lang_file, 'r') as f:
+                    for line in f:
+                        if line.startswith('LANGUAGE='):
+                            language = line.split('=')[1].strip()
+                            break
+            except Exception:
+                pass
+        
+        # Defaults (language-aware text model)
+        if language == 'ar':
+            default_text_model = 'prakasharyan/qwen-arabic'
+        else:
+            default_text_model = 'llama3.2:1b'
+        
         config['ollama'] = {
             'ollama_host': 'local',
             'network_vision_model': 'moondream',
@@ -121,7 +139,7 @@ class AIChatBot:
         }
         config['llm'] = {
             'system_prompt': 'You are a helpful robot. Answer in 1 sentence maximum. Be direct and concise.',
-            'text_model': 'llama3.2:1b',
+            'text_model': default_text_model,
             'vision_model': 'moondream',
             'max_tokens': '50',
             'temperature': '0.7'
