@@ -33,6 +33,16 @@ except ImportError:
     print("ERROR: Ollama Python package not installed. Run: pip3 install ollama")
     sys.exit(1)
 
+# System tools for function calling
+try:
+    from system_tools import TOOL_DEFINITIONS, execute_tool, detect_command_category
+except ImportError:
+    print("ERROR: system_tools.py not found. Function calling will not work.")
+    TOOL_DEFINITIONS = []
+    execute_tool = None
+    detect_command_category = None
+
+
 # Configuration
 CONFIG_FILE = "/etc/ai-chatbot/config.ini"
 SOCKET_PATH = "/tmp/ai-chatbot.sock"
@@ -297,7 +307,7 @@ class AIChatBot:
                 os.remove(self.current_audio_file)
     
     def answer_question(self, question):
-        """Get answer from LLM"""
+        """Get answer from LLM with tool calling support"""
         self.set_state(State.ANSWERING)
         self.update_display("answering", "🤔 Thinking...")
         
@@ -322,46 +332,120 @@ class AIChatBot:
             self.conversation_history = self.conversation_history[-max_history:]
         
         try:
-            # Use Ollama for text chat with strict concise settings
-            text_model = self.config['llm']['text_model']
-            response = ollama.chat(
-                model=text_model,
-                messages=[
-                    {
-                        'role': 'system',
-                        'content': 'You are a helpful robot. Give direct, concise answers. Maximum 2 sentences. No extra formatting or explanations.'
-                    },
-                    {
-                        'role': 'user',
-                        'content': question
+            # STAGE 1: Detect command CATEGORY using regex (loose matching)
+            command_category = None
+            if detect_command_category:
+                command_category = detect_command_category(question)
+            
+            if command_category:
+                # STAGE 2: This is a command - use AI WITH tools to parse details
+                self.log(f"Command category detected: {command_category}")
+                text_model = self.config['llm']['text_model']
+                
+                response = ollama.chat(
+                    model=text_model,
+                    messages=[
+                        {
+                            'role': 'system',
+                            'content': 'You are a robot assistant. The user is giving you a system command. Use the available tools to execute it. Handle variations and typos intelligently (e.g., "too" → "to", "fifty" → 50).'
+                        },
+                        {
+                            'role': 'user',
+                            'content': question
+                        }
+                    ],
+                    tools=TOOL_DEFINITIONS,  # ONLY commands get tools
+                    options={
+                        'num_ctx': 2048,
+                        'temperature': 0.3,  # Lower temperature for more precise parsing
+                        'num_predict': 80
                     }
-                ],
-                options={
-                    'num_ctx': 2048,
-                    'temperature': 0.7,
-                    'num_predict': 50  # Match tested config - enough for 1 concise sentence
-                }
-            )
+                )
+                
+                # Check if AI returned tool calls
+                if 'tool_calls' in response.get('message', {}) and execute_tool:
+                    tool_calls = response['message']['tool_calls']
+                    self.log(f"AI parsed {len(tool_calls)} tool call(s)")
+                    
+                    tool_results = []
+                    for tool_call in tool_calls:
+                        func_name = tool_call.function.name
+                        func_args = tool_call.function.arguments
+                        
+                        self.log(f"Executing: {func_name}({func_args})")
+                        self.update_display("answering", f"⚙️ {func_name}...")
+                        
+                        # Special handling for camera
+                        if func_name == 'take_picture':
+                            self.log("Tool: take_picture - triggering camera")
+                            self.capture_camera()
+                            return  # Camera handles the rest
+                        
+                        # Execute other tools
+                        result = execute_tool(func_name, func_args)
+                        self.log(f"Result: {result}")
+                        tool_results.append(result)
+                    
+                    # Speak combined results
+                    if tool_results:
+                        combined_result = ". ".join(tool_results)
+                        self.conversation_history.append({"role": "assistant", "content": combined_result})
+                        self.update_qa_display(answer=combined_result)
+                        self.speak_answer(combined_result)
+                    else:
+                        self.set_state(State.IDLE)
+                else:
+                    # AI couldn't parse the command - fallback to best guess
+                    self.log("AI couldn't parse command, asking for clarification", "WARN")
+                    fallback_msg = "I detected a command but couldn't understand the details. Please try again."
+                    self.conversation_history.append({"role": "assistant", "content": fallback_msg})
+                    self.update_qa_display(answer=fallback_msg)
+                    self.speak_answer(fallback_msg)
             
-            answer = response['message']['content']
-            
-            # Clean up answer - llama3.2:1b is naturally concise with good prompting
-            answer = answer.strip()
-            
-            # Basic sanity check - must have meaningful content
-            if answer and len(answer) > 10:
-                self.log(f"Answer: {answer}")
-                self.conversation_history.append({"role": "assistant", "content": answer})
-                # Update Q&A display with answer
-                self.update_qa_display(answer=answer)
-                self.speak_answer(answer)
             else:
-                self.log(f"No valid answer generated (got: {response['message']['content'][:100]})", "WARN")
-                self.set_state(State.IDLE)
+                # NOT a command - regular question, use AI WITHOUT tools
+                self.log("Regular question detected (no command category)")
+                text_model = self.config['llm']['text_model']
+                
+                response = ollama.chat(
+                    model=text_model,
+                    messages=[
+                        {
+                            'role': 'system',
+                            'content': 'You are a helpful robot. Give direct, concise answers. Maximum 2 sentences. No extra formatting or explanations.'
+                        },
+                        {
+                            'role': 'user',
+                            'content': question
+                        }
+                    ],
+                    # NO TOOLS - prevents JSON confusion
+                    options={
+                        'num_ctx': 2048,
+                        'temperature': 0.7,
+                        'num_predict': 50
+                    }
+                )
+                
+                # Regular chat response
+                answer = response['message']['content']
+                answer = answer.strip()
+                
+                if answer and len(answer) > 10:
+                    self.log(f"Answer: {answer}")
+                    self.conversation_history.append({"role": "assistant", "content": answer})
+                    self.update_qa_display(answer=answer)
+                    self.speak_answer(answer)
+                else:
+                    self.log(f"No valid answer (got: {response['message']['content'][:100]})", "WARN")
+                    self.set_state(State.IDLE)
                 
         except Exception as e:
             self.log(f"LLM failed: {e}", "ERROR")
+            import traceback
+            self.log(traceback.format_exc(), "ERROR")
             self.set_state(State.IDLE)
+
     
     def speak_answer(self, text):
         """Convert text to speech and play"""

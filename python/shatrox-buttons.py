@@ -90,9 +90,16 @@ def _handle_button_press_impl(button_name, event_type):
         if button_name == "K1":
             if event_type == EdgeEvent.Type.FALLING_EDGE: # Press
                 if not k1_is_recording:
+                    # Start recording
                     display_print("[K1] Starting voice recording (hold to speak)...")
                     send_ai_command("START_RECORDING")
                     k1_is_recording = True
+                else:
+                    # TOGGLE FALLBACK: If already recording, stop it
+                    # This handles cases where release event wasn't detected
+                    display_print("[K1] Stopping recording (toggle fallback)...")
+                    send_ai_command("STOP_RECORDING")
+                    k1_is_recording = False
             
             elif event_type == EdgeEvent.Type.RISING_EDGE: # Release
                 if k1_is_recording:
