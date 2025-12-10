@@ -15,6 +15,12 @@ Automated setup to replicate a Yocto-based AI robot system on Raspberry Pi OS (D
 ## Features
 
 - **Voice Chat:** Hold K1 button to speak, release to get AI response
+- **AI Voice Commands:** Natural language system control via K1 button
+  - Volume control: "set volume to 50%", "change volume too seventy" (handles ASR errors)
+  - Time/Date queries: "what time is it?", "what's the date?"
+  - Camera trigger: "take a picture"
+  - System control: "shutdown system"
+  - Two-stage detection prevents false positives and JSON confusion
 - **Camera Vision:** Press K3 to capture and describe what the camera sees
 - **Text-to-Speech:** Natural-sounding Piper neural TTS
 - **Speech Recognition:** Offline VOSK ASR (no internet required after setup)
@@ -146,11 +152,20 @@ sudo ./setup.sh --reconfigure
 
 | Button | GPIO | Function |
 |--------|------|----------|
-| **K1** | 5 | Voice Chat (hold to speak) |
+| **K1** | 5 | Voice Chat & AI Commands (hold to speak) |
 | **K2** | 6 | Play greeting message |
 | **K3** | 13 | Camera vision (capture and describe) |
 | **K4** | 19 | Fun sound ("zoozoo haii yaii yaii") |
 | **K8** | 26 | System shutdown |
+
+**K1 Voice Commands:** Speak naturally to control the robot:
+- Volume: "set volume to 50", "change volume too seventy"
+- Time: "what time is it?", "tell me the time"
+- Date: "what's the date today?"
+- Camera: "take a picture"
+- System: "shutdown system"
+
+**Note:** If K1 button release is not detected, press K1 again to stop recording (toggle fallback).
 
 ## System Architecture
 
