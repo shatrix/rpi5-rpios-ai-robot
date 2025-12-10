@@ -64,10 +64,21 @@ Automated setup to replicate a Yocto-based AI robot system on Raspberry Pi OS (D
 
 Flash the latest **Raspberry Pi OS (64-bit, Debian 13 Bookworm)** to your SD card or SSD.
 
-### 2. Copy Project to RPi
+### 2. Deploy Project to RPi
 
+**Option A: Using deployment script** (recommended)
 ```bash
 # From your laptop
+cd rpi5-rpios-ai-robot
+./deploy-to-rpi.sh <RPI_IP> [username]
+
+# Examples:
+./deploy-to-rpi.sh 192.168.2.134        # Deploy to pi@192.168.2.134
+./deploy-to-rpi.sh 192.168.2.134 shatrix  # Deploy with custom user
+```
+
+**Option B: Manual copy**
+```bash
 scp -r rpi5-rpios-ai-robot pi@<raspberry-pi-ip>:~/
 ```
 
@@ -94,8 +105,42 @@ The setup will:
   - **Option 2:** Network Ollama (GPU server, faster vision ~2s with auto-fallback)
 - Download and configure AI models (~2.7GB download for local mode)
 - Install and enable all services
+- **Remember completed steps** - re-running skips already completed tasks
 
 **Time:** ~30-45 minutes (depending on internet speed)
+
+### Setup Script Options
+
+The setup script supports smart execution modes:
+
+```bash
+# Smart mode (default) - skips already completed steps
+sudo ./setup.sh
+
+# Force re-run everything
+sudo ./setup.sh --force
+
+# Run only specific step (e.g., step 08 = install services)
+sudo ./setup.sh --step 08
+
+# Force run specific step (ignores completion status)
+sudo ./setup.sh --force --step 08
+
+# Resume from specific step
+sudo ./setup.sh --from-step 06
+
+# Reconfigure without reinstalling
+sudo ./setup.sh --reconfigure
+
+# Show all options
+./setup.sh --help
+```
+
+**Key Features:**
+- **State tracking**: Remembers completed steps, skips them on re-run (requires `jq`)
+- **Smart file installation**: Only updates changed files (checksum-based)
+- **Config preservation**: Existing configurations preserved unless `--reconfigure`
+- **Selective execution**: Run individual steps or resume from any point
 
 ## Button Functions
 
@@ -104,7 +149,7 @@ The setup will:
 | **K1** | 5 | Voice Chat (hold to speak) |
 | **K2** | 6 | Play greeting message |
 | **K3** | 13 | Camera vision (capture and describe) |
-| **K4** | 19 | Cancel/Stop current operation |
+| **K4** | 19 | Fun sound ("zoozoo haii yaii yaii") |
 | **K8** | 26 | System shutdown |
 
 ## System Architecture
