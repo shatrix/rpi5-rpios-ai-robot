@@ -14,13 +14,16 @@ Automated setup to replicate a Yocto-based AI robot system on Raspberry Pi OS (D
 
 ## Features
 
-- **Voice Chat:** Hold K1 button to speak, release to get AI response
-- **AI Voice Commands:** Natural language system control via K1 button
-  - Volume control: "set volume to 50%", "change volume too seventy" (handles ASR errors)
+- **Wake Word:** Hands-free activation with "Hey Jarvis" (OpenWakeWord)
+- **Smart Voice Detection (VAD):** Automatically detects end of speech for natural conversation (no push-to-talk needed)
+- **Voice Chat:** 
+  - Hands-free: "Hey Jarvis" -> Speak command -> Auto-stop
+  - Manual: Hold K1 button -> Speak -> Release
+- **AI Voice Commands:** Natural language system control
+  - Volume control: "set volume to 50%", "change volume too seventy"
   - Time/Date queries: "what time is it?", "what's the date?"
   - Camera trigger: "take a picture"
   - System control: "shutdown system"
-  - Two-stage detection prevents false positives and JSON confusion
 - **Camera Vision:** Press K3 to capture and describe what the camera sees
 - **Text-to-Speech:** Natural-sounding Piper neural TTS
 - **Speech Recognition:** Offline VOSK ASR (no internet required after setup)

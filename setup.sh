@@ -174,6 +174,7 @@ STEPS=(
     "07-camera-setup.sh"
     "08-install-services.sh"
     "09-download-models.sh"
+    "10-wake-word-setup.sh"
 )
 
 TOTAL_STEPS=${#STEPS[@]}

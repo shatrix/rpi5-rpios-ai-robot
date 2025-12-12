@@ -236,7 +236,7 @@ ApplicationWindow {
                     selectByMouse: false
                     selectByKeyboard: false
                     
-                    font.family: "Sans Serif"
+                    font.family: "Monospace"
                     font.pixelSize: 13
                     font.bold: false
                     color: "#00ff00"
