@@ -62,16 +62,16 @@ cd /usr/share/openwakeword-models
 
 # Download Hey Jarvis model from GitHub releases v0.5.1 (temporary, will be replaced with custom "Hey Ruby")
 info "Downloading 'Hey Jarvis' model (temporary wake word)..."
-if ! wget -q --show-progress -O hey_jarvis_v0.1.tflite \
-    "https://github.com/dscripka/openWakeWord/releases/download/v0.5.1/hey_jarvis_v0.1.tflite" 2>&1 | tee -a /var/log/rpi5-ai-robot-setup.log; then
+if ! wget -q --show-progress -O hey_jarvis_v0.1.onnx \
+    "https://github.com/dscripka/openWakeWord/releases/download/v0.5.1/hey_jarvis_v0.1.onnx" 2>&1 | tee -a /var/log/rpi5-ai-robot-setup.log; then
     error "Failed to download Hey Jarvis model"
     exit 1
 fi
 
 # Download Alexa model (backup option) from same release
 info "Downloading 'Alexa' model (backup option)..."
-if ! wget -q --show-progress -O alexa_v0.1.tflite \
-    "https://github.com/dscripka/openWakeWord/releases/download/v0.5.1/alexa_v0.1.tflite" 2>&1 | tee -a /var/log/rpi5-ai-robot-setup.log; then
+if ! wget -q --show-progress -O alexa_v0.1.onnx \
+    "https://github.com/dscripka/openWakeWord/releases/download/v0.5.1/alexa_v0.1.onnx" 2>&1 | tee -a /var/log/rpi5-ai-robot-setup.log; then
     error "Failed to download Alexa model"
     exit 1
 fi
