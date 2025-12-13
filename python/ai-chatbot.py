@@ -1038,13 +1038,13 @@ class AIChatBot:
                             # Still in cooldown, discard predictions to clear model buffers
                             continue
                         
-                        # Debug: Log predictions periodically
-                        if not hasattr(self, '_wake_debug_counter'):
-                            self._wake_debug_counter = 0
-                        self._wake_debug_counter += 1
-                        if self._wake_debug_counter % 50 == 0:  # Every ~4 seconds
-                            pred_str = ", ".join([f"{k}: {v:.3f}" for k, v in prediction.items()])
-                            self.log(f"Wake word predictions: {pred_str}", "DEBUG")
+                        # Debug: Log predictions periodically (DISABLED - too verbose)
+                        # if not hasattr(self, '_wake_debug_counter'):
+                        #     self._wake_debug_counter = 0
+                        # self._wake_debug_counter += 1
+                        # if self._wake_debug_counter % 50 == 0:  # Every ~4 seconds
+                        #     pred_str = ", ".join([f"{k}: {v:.3f}" for k, v in prediction.items()])
+                        #     self.log(f"Wake word predictions: {pred_str}", "DEBUG")
                         
                         # Check if wake word detected (check all predictions for threshold)
                         max_score = max(prediction.values()) if prediction else 0

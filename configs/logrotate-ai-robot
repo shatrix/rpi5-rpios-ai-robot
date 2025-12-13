@@ -1,0 +1,23 @@
+
+# Log rotation for AI robot logs
+/var/log/robot-ai.log {
+    weekly
+    rotate 4
+    compress
+    missingok
+    notifempty
+    create 0666 root root
+    postrotate
+        # Optional: restart service to release old log file handle
+        # systemctl restart ai-chatbot >/dev/null 2>&1 || true
+    endscript
+}
+
+/var/log/rpi5-ai-robot-setup.log {
+    monthly
+    rotate 6
+    compress
+    missingok
+    notifempty
+    create 0644 root root
+}

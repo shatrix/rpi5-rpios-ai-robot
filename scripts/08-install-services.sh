@@ -130,6 +130,15 @@ chmod 666 /var/log/robot-ai.log
 
 echo "✓ Runtime directories created"
 
+# Install logrotate configuration
+echo "→ Installing logrotate configuration..."
+if [ -f "$SCRIPT_DIR/configs/logrotate-ai-robot" ]; then
+    smart_install 644 "$SCRIPT_DIR/configs/logrotate-ai-robot" /etc/logrotate.d/ai-robot
+    echo "✓ Log rotation configured (weekly, keep 4 weeks)"
+else
+    echo "  ⚠ Warning: logrotate config not found, skipping..."
+fi
+
 echo ""
 echo "  Services installed:"
 echo "    - ai-chatbot.service (AI orchestration)"
