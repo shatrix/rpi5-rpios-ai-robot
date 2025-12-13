@@ -124,6 +124,15 @@ class AIChatBot:
         Path(RECORDINGS_DIR).mkdir(parents=True, exist_ok=True)
         Path(CAMERA_DIR).mkdir(parents=True, exist_ok=True)
         
+        # DEFENSIVE FIX: Clear any stale listening state from previous crashes/restarts
+        # This prevents the mic indicator from being stuck on display after service restart
+        try:
+            with open(QA_DISPLAY_FILE, 'w') as f:
+                f.write("")  # Clear the file to prevent stale "LISTENING..." state
+            self.log("Cleared stale display state on startup", "INFO")
+        except Exception as e:
+            self.log(f"Failed to clear display state on startup: {e}", "WARN")
+        
         # Load VOSK model
         self.load_vosk_model()
         
@@ -282,8 +291,18 @@ class AIChatBot:
     
     def set_state(self, new_state):
         """Change state and update display"""
-        self.log(f"State transition: {self.state.value} -> {new_state.value}")
+        old_state = self.state
         self.state = new_state
+        self.log(f"State: {old_state.value} -> {new_state.value}")
+        
+        # DEFENSIVE FIX: Automatically clear listening indicator when leaving LISTENING state
+        # This catches any missed cleanup calls in error paths
+        if old_state == State.LISTENING and new_state != State.LISTENING:
+            try:
+                self.update_qa_display(clear=True)
+                self.log("Auto-cleared listening indicator on state transition", "DEBUG")
+            except Exception as e:
+                self.log(f"Failed to auto-clear listening indicator: {e}", "WARN")
         self.update_display(new_state.value)
     
     def start_recording(self):
@@ -311,45 +330,60 @@ class AIChatBot:
             self.log("Stop recording called but not currently recording")
             return
         
-        self.is_recording = False
-        self.log(f"Stopped recording")
-        
-        # Check if we have any audio data
-        if not self.audio_buffer or len(self.audio_buffer) == 0:
-            self.log("No audio data recorded", "WARN")
-            self.update_qa_display(clear=True)  # FIX: Clear listening indicator
-            if self.wake_word_enabled:
-                self.set_state(State.WAKE_LISTENING)
-            else:
-                self.set_state(State.IDLE)
-            return
-        
-        # Save buffered audio to WAV file
+        # DEFENSIVE FIX: Use try/finally to ensure cleanup always happens
         try:
-            self.save_audio_buffer_to_wav()
+            self.log(f"Stopped recording")
             
-            # Check file size
-            file_size = os.path.getsize(self.current_audio_file)
-            if file_size < 1000:  # Less than 1KB
-                self.log(f"Recording too small ({file_size} bytes), no usable audio", "WARN")
-                os.remove(self.current_audio_file)
-                self.update_qa_display(clear=True)  # FIX: Clear listening indicator
+            # Check if we have any audio data
+            if not self.audio_buffer or len(self.audio_buffer) == 0:
+                self.log("No audio data recorded", "WARN")
+                self.update_qa_display(clear=True)  # Clear listening indicator
                 if self.wake_word_enabled:
                     self.set_state(State.WAKE_LISTENING)
                 else:
                     self.set_state(State.IDLE)
                 return
             
-            # Transcribe
-            self.set_state(State.TRANSCRIBING)
-            self.transcribe_audio()
-            
-        except Exception as e:
-            self.log(f"Error saving/transcribing audio: {e}", "ERROR")
-            self.update_qa_display(clear=True)  # FIX: Clear listening indicator
-            if self.wake_word_enabled:
-                self.set_state(State.WAKE_LISTENING)
-            else:
+            # Save buffered audio to WAV file
+            try:
+                self.save_audio_buffer_to_wav()
+                
+                # Check file size
+                file_size = os.path.getsize(self.current_audio_file)
+                if file_size < 1000:  # Less than 1KB
+                    self.log(f"Recording too small ({file_size} bytes), no usable audio", "WARN")
+                    os.remove(self.current_audio_file)
+                    self.update_qa_display(clear=True)  # Clear listening indicator
+                    if self.wake_word_enabled:
+                        self.set_state(State.WAKE_LISTENING)
+                    else:
+                        self.set_state(State.IDLE)
+                    return
+                
+                # Transcribe
+                self.set_state(State.TRANSCRIBING)
+                self.transcribe_audio()
+                
+            except Exception as e:
+                self.log(f"Error saving/transcribing audio: {e}", "ERROR")
+                self.update_qa_display(clear=True)  # Clear listening indicator
+                if self.wake_word_enabled:
+                    self.set_state(State.WAKE_LISTENING)
+                else:
+                    self.set_state(State.IDLE)
+        
+        finally:
+            # DEFENSIVE FIX: Always clear recording flag and ensure display is clean
+            # This runs even if there were exceptions above
+            self.is_recording = False
+            # Double-check that listening indicator is cleared (defensive)
+            try:
+                # Only clear if we're not already in TRANSCRIBING state (which means transcribe succeeded)
+                if self.state != State.TRANSCRIBING:
+                    self.update_qa_display(clear=True)
+                    self.log("Ensured listening indicator cleared in finally block", "DEBUG")
+            except Exception as e:
+                self.log(f"Failed to clear indicator in finally block: {e}", "WARN")
                 self.set_state(State.IDLE)
     
     def save_audio_buffer_to_wav(self):
@@ -1014,15 +1048,36 @@ class AIChatBot:
                             
                             if self.speech_started and silence_duration >= silence_threshold:
                                 self.log(f"End of speech detected ({silence_duration:.1f}s silence)")
-                                self.stop_recording()
+                                # DEFENSIVE FIX: Wrap in try/except to ensure cleanup even if stop_recording fails
+                                try:
+                                    self.stop_recording()
+                                except Exception as e:
+                                    self.log(f"Error in stop_recording (VAD): {e}", "ERROR")
+                                    self.is_recording = False
+                                    self.update_qa_display(clear=True)
+                                    self.set_state(State.WAKE_LISTENING if self.wake_word_enabled else State.IDLE)
                             elif elapsed >= self.recording_duration:
                                 self.log(f"Max recording time reached ({elapsed:.1f}s)")
-                                self.stop_recording()
+                                # DEFENSIVE FIX: Wrap in try/except to ensure cleanup even if stop_recording fails
+                                try:
+                                    self.stop_recording()
+                                except Exception as e:
+                                    self.log(f"Error in stop_recording (timeout): {e}", "ERROR")
+                                    self.is_recording = False
+                                    self.update_qa_display(clear=True)
+                                    self.set_state(State.WAKE_LISTENING if self.wake_word_enabled else State.IDLE)
                         else:
                             # Fallback: timer-based recording (no VAD)
                             if elapsed >= self.recording_duration:
                                 self.log(f"Auto-stopping recording after {elapsed:.1f}s")
-                                self.stop_recording()
+                                # DEFENSIVE FIX: Wrap in try/except to ensure cleanup even if stop_recording fails
+                                try:
+                                    self.stop_recording()
+                                except Exception as e:
+                                    self.log(f"Error in stop_recording (fallback): {e}", "ERROR")
+                                    self.is_recording = False
+                                    self.update_qa_display(clear=True)
+                                    self.set_state(State.WAKE_LISTENING if self.wake_word_enabled else State.IDLE)
                     
                     # Only do wake word detection if in WAKE_LISTENING state and not in cooldown
                     if self.state == State.WAKE_LISTENING and not self.wake_word_paused:

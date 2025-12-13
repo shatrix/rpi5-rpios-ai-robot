@@ -153,7 +153,7 @@ def _handle_button_press_impl(button_name, event_type):
             display_print("[K2] Speaking greeting message...")
             subprocess.Popen([
                 "speak",
-                "Hi, I'm Ruby — an AI-powered robot here to answer your questions"
+                "Hi, I'm Jarvis — an AI-powered robot here to answer your questions"
             ])
             return
 
