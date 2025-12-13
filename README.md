@@ -25,6 +25,7 @@ Automated setup to replicate a Yocto-based AI robot system on Raspberry Pi OS (D
   - Camera trigger: "take a picture"
   - System control: "shutdown system"
 - **Camera Vision:** Press K3 to capture and describe what the camera sees
+  - **Photo Overlay:** Captured images display on-screen for 5 seconds with fade animations
 - **Text-to-Speech:** Natural-sounding Piper neural TTS
 - **Speech Recognition:** Offline VOSK ASR (no internet required after setup)
 - **LLM:** Ollama with Llama 3.2 (text) and Moondream/qwen3-vl (vision) models
@@ -36,7 +37,7 @@ Automated setup to replicate a Yocto-based AI robot system on Raspberry Pi OS (D
     - Vision: qwen3-vl on network server (~2s per image, 30x faster)
   - **Auto-Fallback:** Automatic fallback to local models on network failure
   - **Smart Command Optimization:** Camera commands execute instantly (no LLM delay)
-- **Robot Face GUI:** QML-based display with animated eyes, touch interaction
+- **Robot Face GUI:** QML-based display with animated eyes, touch interaction, camera photo overlay
 - **Flexible Deployment:** Choose between fully offline or network-accelerated vision
 
 ## Hardware Photos

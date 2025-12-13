@@ -296,6 +296,112 @@ ApplicationWindow {
         }
     }
     
+    // ============================================================
+    // CAMERA PHOTO OVERLAY
+    // ============================================================
+    
+    // Photo overlay background (full screen with transparency)
+    Rectangle {
+        id: photoOverlay
+        anchors.fill: parent
+        color: "#000000"
+        opacity: 0
+        visible: opacity > 0
+        z: 100
+        
+        // Centered photo display
+        Image {
+            id: photoDisplay
+            anchors.centerIn: parent
+            width: 400
+            height: 300
+            fillMode: Image.PreserveAspectFit
+            source: ""
+            cache: false
+            
+            // Border around photo
+            Rectangle {
+                anchors.fill: parent
+                color: "transparent"
+                border.color: "#00ff00"
+                border.width: 3
+                radius: 4
+            }
+        }
+        
+        // Camera icon indicator
+        Text {
+            anchors.top: photoDisplay.bottom
+            anchors.topMargin: 10
+            anchors.horizontalCenter: parent.horizontalCenter
+            text: "📷 Camera Capture"
+            font.family: "Monospace"
+            font.pixelSize: 14
+            font.bold: true
+            color: "#00ff00"
+        }
+        
+        // Fade in animation
+        NumberAnimation {
+            id: photoFadeIn
+            target: photoOverlay
+            property: "opacity"
+            from: 0
+            to: 0.95
+            duration: 300
+            easing.type: Easing.InOutQuad
+        }
+        
+        // Fade out animation
+        NumberAnimation {
+            id: photoFadeOut
+            target: photoOverlay
+            property: "opacity"
+            from: 0.95
+            to: 0
+            duration: 500
+            easing.type: Easing.InOutQuad
+        }
+        
+        // Auto-hide timer (5 seconds)
+        Timer {
+            id: photoHideTimer
+            interval: 5000
+            running: false
+            repeat: false
+            onTriggered: photoFadeOut.start()
+        }
+    }
+    
+    // Photo monitor - detects new photos via trigger file
+    Timer {
+        id: photoMonitor
+        interval: 200
+        running: true
+        repeat: true
+        
+        property string triggerFile: "/tmp/shatrox-photo-trigger"
+        property string lastTrigger: ""
+        property string photoFile: "/tmp/shatrox-latest-photo.jpg"
+        
+        onTriggered: {
+            var trigger = fileReader.readFile(triggerFile)
+            if (trigger !== "" && trigger !== lastTrigger) {
+                lastTrigger = trigger
+                console.log("New photo detected! Showing overlay...")
+                
+                // Force reload the image
+                photoDisplay.source = ""
+                photoDisplay.source = "file://" + photoFile
+                
+                // Show overlay with animation
+                photoFadeIn.start()
+                photoHideTimer.restart()
+            }
+        }
+    }
+    
+
     // Random blink timer
     Timer {
         id: blinkTimer
@@ -548,5 +654,6 @@ ApplicationWindow {
         console.log("Monitoring:", qaMonitor.qaFile)
         console.log("Temperature sensor:", cpuTempMonitor.thermalFile)
         console.log("Volume status:", volumeMonitor.volumeFile)
+        console.log("Photo trigger:", photoMonitor.triggerFile)
     }
 }

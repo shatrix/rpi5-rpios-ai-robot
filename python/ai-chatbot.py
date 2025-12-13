@@ -757,6 +757,21 @@ class AIChatBot:
             ], timeout=10, check=True)
             
             self.log(f"Captured image: {image_path}")
+        
+            # Create symlink for QML display overlay
+            latest_photo_link = "/tmp/shatrox-latest-photo.jpg"
+            try:
+                # Remove old symlink if exists
+                if os.path.exists(latest_photo_link):
+                    os.remove(latest_photo_link)
+                # Create new symlink
+                os.symlink(image_path, latest_photo_link)
+                # Write trigger timestamp for QML to detect
+                with open("/tmp/shatrox-photo-trigger", "w") as f:
+                    f.write(f"{time.time()}\n")
+                self.log("Created photo symlink for display overlay")
+            except Exception as e:
+                self.log(f"Failed to create photo symlink: {e}", "WARN")
             
             # Describe image with vision model
             self.describe_image(image_path)
