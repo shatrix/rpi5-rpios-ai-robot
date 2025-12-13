@@ -174,7 +174,8 @@ ApplicationWindow {
             id: noseTemp
             anchors.horizontalCenter: parent.horizontalCenter
             anchors.verticalCenter: eyesRow.verticalCenter
-            width: 50
+            anchors.horizontalCenterOffset: -35
+            width: 65
             height: 30
             radius: 6
             color: "#1a1a1a"
@@ -183,14 +184,51 @@ ApplicationWindow {
             
             Row {
                 anchors.centerIn: parent
+                spacing: 2
+                
+                Text {
+                    text: Math.round(cpuTempMonitor.temperature) + "°C"
+                    font.family: "Monospace"
+                    font.pixelSize: 10
+                    font.bold: true
+                    color: cpuTempMonitor.tempColor
+                    anchors.verticalCenter: parent.verticalCenter
+                }
+            }
+        }
+        
+        // Speaker Volume Display - next to CPU temp
+        Rectangle {
+            id: volumeIndicator
+            anchors.left: noseTemp.right
+            anchors.leftMargin: 5
+            anchors.verticalCenter: eyesRow.verticalCenter
+            width: 65
+            height: 30
+            radius: 6
+            color: "#1a1a1a"
+            border.color: volumeMonitor.volumeColor
+            border.width: 2
+            
+            Row {
+                anchors.centerIn: parent
                 spacing: 3
                 
                 Text {
-                    text: Math.round(cpuTempMonitor.temperature)
+                    text: "♪"
                     font.family: "Monospace"
                     font.pixelSize: 12
                     font.bold: true
-                    color: cpuTempMonitor.tempColor
+                    color: volumeMonitor.volumeColor
+                    anchors.verticalCenter: parent.verticalCenter
+                }
+                
+                Text {
+                    text: Math.round(volumeMonitor.volumePercent) + "%"
+                    font.family: "Monospace"
+                    font.pixelSize: 10
+                    font.bold: true
+                    color: volumeMonitor.volumeColor
                     anchors.verticalCenter: parent.verticalCenter
                 }
             }
@@ -449,6 +487,43 @@ ApplicationWindow {
         }
     }
     
+    // Speaker Volume monitoring timer
+    Timer {
+        id: volumeMonitor
+        interval: 500
+        running: true
+        repeat: true
+        
+        property real volumePercent: 0.0
+        property string volumeColor: "#00ff00"
+        property string volumeFile: "/tmp/shatrox-volume-status"
+        
+        function updateColor() {
+            if (volumePercent <= 50) {
+                volumeColor = "#00ff00"  // Green
+            } else if (volumePercent <= 75) {
+                volumeColor = "#ffff00"  // Yellow
+            } else if (volumePercent <= 90) {
+                volumeColor = "#ff8800"  // Orange
+            } else {
+                volumeColor = "#ff0000"  // Red
+            }
+        }
+        
+        onTriggered: {
+            var content = fileReader.readFile(volumeFile)
+            if (content !== "") {
+                // Parse volume percentage from file
+                // Expected format: "49" (just the percentage number)
+                var percent = parseInt(content.trim())
+                if (!isNaN(percent)) {
+                    volumePercent = percent
+                    updateColor()
+                }
+            }
+        }
+    }
+    
     // File reader helper
     QtObject {
         id: fileReader
@@ -470,7 +545,8 @@ ApplicationWindow {
     
     Component.onCompleted: {
         console.log("SHATROX Robot Face Display Started")
-        console.log("Monitoring:", logMonitor.logFile)
+        console.log("Monitoring:", qaMonitor.qaFile)
         console.log("Temperature sensor:", cpuTempMonitor.thermalFile)
+        console.log("Volume status:", volumeMonitor.volumeFile)
     }
 }

@@ -1,0 +1,21 @@
+#!/bin/bash
+# Volume Monitor - Monitors speaker volume and updates status file
+# Used by QML display to show real-time volume indicator
+
+STATUS_FILE="/tmp/shatrox-volume-status"
+
+echo "Volume monitor starting - watching speaker volume"
+
+while true; do
+    # Get current speaker volume percentage from ALSA
+    # amixer output example: "Front Left: Playback 18 [49%] [-19.00dB] [on]"
+    VOLUME_PERCENT=$(amixer -c 0 get Speaker | grep -o '\[[0-9]\+%\]' | head -n 1 | tr -d '[]%')
+    
+    if [ -n "$VOLUME_PERCENT" ]; then
+        # Write volume percentage to status file
+        echo "$VOLUME_PERCENT" > "$STATUS_FILE"
+    fi
+    
+    # Check every 500ms (same as QML polling rate)
+    sleep 0.5
+done

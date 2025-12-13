@@ -88,6 +88,7 @@ ssh "$RPI_USER@$RPI_IP" "cd $DEPLOY_DIR && \
     chmod +x scripts-helpers/* 2>/dev/null || true && \
     chmod +x qml/shatrox-display-start 2>/dev/null || true && \
     chmod +x qml/shatrox-touch-monitor 2>/dev/null || true && \
+    chmod +x qml/shatrox-volume-monitor 2>/dev/null || true && \
     chmod +x python/*.py 2>/dev/null || true"
 
 echo ""

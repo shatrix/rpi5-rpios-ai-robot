@@ -77,6 +77,7 @@ mkdir -p /usr/share/shatrox
 smart_install 0644 "$SCRIPT_DIR/qml/shatrox-display.qml" /usr/share/shatrox/shatrox-display.qml
 smart_install 0755 "$SCRIPT_DIR/qml/shatrox-display-start" /usr/local/bin/shatrox-display-start
 smart_install 0755 "$SCRIPT_DIR/qml/shatrox-touch-monitor" /usr/local/bin/shatrox-touch-monitor
+smart_install 0755 "$SCRIPT_DIR/qml/shatrox-volume-monitor" /usr/local/bin/shatrox-volume-monitor
 
 echo "✓ QML app installed"
 
@@ -99,6 +100,7 @@ smart_install 644 "${SCRIPT_DIR}/services/ai-chatbot.service" /etc/systemd/syste
 smart_install 644 "${SCRIPT_DIR}/services/shatrox-buttons.service" /etc/systemd/system/shatrox-buttons.service
 smart_install 644 "${SCRIPT_DIR}/services/shatrox-display.service" /etc/systemd/system/shatrox-display.service
 smart_install 644 "${SCRIPT_DIR}/services/shatrox-touch-monitor.service" /etc/systemd/system/shatrox-touch-monitor.service
+smart_install 644 "${SCRIPT_DIR}/services/shatrox-volume-monitor.service" /etc/systemd/system/shatrox-volume-monitor.service
 smart_install 644 "${SCRIPT_DIR}/services/startup-sound.service" /etc/systemd/system/startup-sound.service
 
 
@@ -109,6 +111,7 @@ systemctl enable ai-chatbot.service
 systemctl enable shatrox-buttons.service
 systemctl enable shatrox-display.service
 systemctl enable shatrox-touch-monitor.service
+systemctl enable shatrox-volume-monitor.service
 systemctl enable startup-sound.service
 
 echo "✓ Services enabled"
@@ -133,6 +136,7 @@ echo "    - ai-chatbot.service (AI orchestration)"
 echo "    - shatrox-buttons.service (GPIO button monitoring)"
 echo "    - shatrox-display.service (QML robot face)"
 echo "    - shatrox-touch-monitor.service (Touch detection)"
+echo "    - shatrox-volume-monitor.service (Volume display)"
 echo ""
 echo "  All services enabled to start on boot"
 echo ""
