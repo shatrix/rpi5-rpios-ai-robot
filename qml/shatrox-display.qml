@@ -382,7 +382,7 @@ ApplicationWindow {
         running: true
         repeat: true
         
-        property string qaContent: "╔════════════════════════════╗\n║  SHATROX AI Robot Ready  ║\n╚════════════════════════════╝\n\nPress K1 to talk\nPress K3 for camera"
+        property string qaContent: "╔════════════════════════════╗\n║  SHATROX AI Robot Ready  ║\n╚════════════════════════════╝\n\nSay 'Hey Jarvis' to activate\nPress K1 to talk\nPress K3 for camera"
         property string previousContent: ""
         property string qaFile: "/tmp/ai-qa-display.txt"
         property bool hasNewContent: false

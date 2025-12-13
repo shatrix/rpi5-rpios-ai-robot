@@ -56,7 +56,7 @@ except ImportError:
 
 # System tools for function calling
 try:
-    from system_tools import TOOL_DEFINITIONS, execute_tool, detect_command_category
+    from system_tools import TOOL_DEFINITIONS, execute_tool, detect_command_category, get_current_time, get_current_date
 except ImportError:
     print("ERROR: system_tools.py not found. Function calling will not work.")
     TOOL_DEFINITIONS = []
@@ -316,6 +316,7 @@ class AIChatBot:
         # Check if we have any audio data
         if not self.audio_buffer or len(self.audio_buffer) == 0:
             self.log("No audio data recorded", "WARN")
+            self.update_qa_display(clear=True)  # FIX: Clear listening indicator
             if self.wake_word_enabled:
                 self.set_state(State.WAKE_LISTENING)
             else:
@@ -331,6 +332,7 @@ class AIChatBot:
             if file_size < 1000:  # Less than 1KB
                 self.log(f"Recording too small ({file_size} bytes), no usable audio", "WARN")
                 os.remove(self.current_audio_file)
+                self.update_qa_display(clear=True)  # FIX: Clear listening indicator
                 if self.wake_word_enabled:
                     self.set_state(State.WAKE_LISTENING)
                 else:
@@ -343,6 +345,7 @@ class AIChatBot:
             
         except Exception as e:
             self.log(f"Error saving/transcribing audio: {e}", "ERROR")
+            self.update_qa_display(clear=True)  # FIX: Clear listening indicator
             if self.wake_word_enabled:
                 self.set_state(State.WAKE_LISTENING)
             else:
@@ -402,14 +405,19 @@ class AIChatBot:
                 self.answer_question(transcribed_text)
             else:
                 self.log("No speech detected", "WARN")
+                self.update_qa_display(clear=True)  # FIX: Clear listening indicator
                 # Return to wake listening if enabled, otherwise IDLE
                 if self.wake_word_enabled:
+                    # Add cooldown to prevent wake word from immediately re-triggering
+                    self.tts_cooldown_until = time.time() + 1.0
+                    self.log("Setting 1s cooldown to prevent wake word re-trigger")
                     self.set_state(State.WAKE_LISTENING)
                 else:
                     self.set_state(State.IDLE)
                 
         except Exception as e:
             self.log(f"Transcription failed: {e}", "ERROR")
+            self.update_qa_display(clear=True)  # FIX: Clear listening indicator
             self.set_state(State.IDLE)
         finally:
             # Clean up audio file
@@ -449,8 +457,15 @@ class AIChatBot:
                 command_category = detect_command_category(question)
             
             if command_category:
-                # STAGE 2: This is a command - use AI WITH tools to parse details
-                self.log(f"Command category detected: {command_category}")
+                # OPTIMIZATION: Camera command can bypass LLM (no parameters, instant trigger)
+                if command_category == 'CAMERA_COMMAND':
+                    self.log("Camera command - executing directly (no LLM needed)")
+                    self.capture_camera()
+                    return
+                
+                # STAGE 2: For all other commands, use AI WITH tools to parse details
+                # (TIME, DATE, VOLUME, SHUTDOWN all need LLM for typo handling)
+                self.log(f"Command category detected: {command_category} (needs LLM parsing)")
                 text_model = self.config['llm']['text_model']
                 
                 response = ollama.chat(
@@ -465,7 +480,7 @@ class AIChatBot:
                             'content': question
                         }
                     ],
-                    tools=TOOL_DEFINITIONS,  # ONLY commands get tools
+                    tools=TOOL_DEFINITIONS,  # All commands get tools for intelligent parsing
                     options={
                         'num_ctx': 2048,
                         'temperature': 0.3,  # Lower temperature for more precise parsing
