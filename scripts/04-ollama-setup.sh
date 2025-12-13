@@ -74,6 +74,14 @@ if [ "$SKIP_CONFIG" = false ]; then
     echo ""
     echo "→ Updating configuration file: $CONFIG_FILE"
     
+    # If network mode, prompt for text model too
+    NETWORK_TEXT_MODEL="llama3.2:3b"
+    if [ "$OLLAMA_CHOICE" = "2" ]; then
+        echo ""
+        read -p "Enter text model name on network server (default: llama3.2:3b): " NETWORK_TEXT_MODEL_INPUT
+        NETWORK_TEXT_MODEL=${NETWORK_TEXT_MODEL_INPUT:-llama3.2:3b}
+    fi
+    
     cat > "$CONFIG_FILE" << EOF
 [ollama]
 # Ollama server configuration
@@ -81,6 +89,8 @@ if [ "$SKIP_CONFIG" = false ]; then
 ollama_host = $OLLAMA_HOST
 # Vision model to use on network server (if ollama_host is not 'local')
 network_vision_model = $NETWORK_MODEL
+# Text model to use on network server (if ollama_host is not 'local')
+network_text_model = $NETWORK_TEXT_MODEL
 # Connection timeout for network Ollama (seconds)
 network_timeout = 5
 

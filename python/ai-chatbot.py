@@ -166,6 +166,7 @@ class AIChatBot:
         config['ollama'] = {
             'ollama_host': 'local',
             'network_vision_model': 'moondream',
+            'network_text_model': 'llama3.2:3b',
             'network_timeout': '5'
         }
         config['llm'] = {
@@ -466,27 +467,81 @@ class AIChatBot:
                 # STAGE 2: For all other commands, use AI WITH tools to parse details
                 # (TIME, DATE, VOLUME, SHUTDOWN all need LLM for typo handling)
                 self.log(f"Command category detected: {command_category} (needs LLM parsing)")
-                text_model = self.config['llm']['text_model']
                 
-                response = ollama.chat(
-                    model=text_model,
-                    messages=[
-                        {
-                            'role': 'system',
-                            'content': 'You are a robot assistant. The user is giving you a system command. Use the available tools to execute it. Handle variations and typos intelligently (e.g., "too" → "to", "fifty" → 50).'
-                        },
-                        {
-                            'role': 'user',
-                            'content': question
+                # Try network Ollama first if configured
+                if self.use_network_ollama:
+                    text_model = self.config['ollama']['network_text_model']
+                    self.log(f"Using network Ollama for command: {text_model}")
+                    
+                    try:
+                        response = self.ollama_client.chat(
+                            model=text_model,
+                            messages=[
+                                {
+                                    'role': 'system',
+                                    'content': 'You are a robot assistant. The user is giving you a system command. Use the available tools to execute it. Handle variations and typos intelligently (e.g., "too" → "to", "fifty" → 50).'
+                                },
+                                {
+                                    'role': 'user',
+                                    'content': question
+                                }
+                            ],
+                            tools=TOOL_DEFINITIONS,
+                            options={
+                                'num_ctx': 2048,
+                                'temperature': 0.3,
+                                'num_predict': 80
+                            }
+                        )
+                        self.log("Network Ollama success")
+                    
+                    except (ConnectionError, TimeoutError, Exception) as e:
+                        # Network failed - fall back to local
+                        self.log(f"Network Ollama failed: {e}, falling back to local", "WARN")
+                        text_model = self.config['llm']['text_model']
+                        
+                        response = ollama.chat(
+                            model=text_model,
+                            messages=[
+                                {
+                                    'role': 'system',
+                                    'content': 'You are a robot assistant. The user is giving you a system command. Use the available tools to execute it. Handle variations and typos intelligently (e.g., "too" → "to", "fifty" → 50).'
+                                },
+                                {
+                                    'role': 'user',
+                                    'content': question
+                                }
+                            ],
+                            tools=TOOL_DEFINITIONS,
+                            options={
+                                'num_ctx': 2048,
+                                'temperature': 0.3,
+                                'num_predict': 80
+                            }
+                        )
+                        self.log(f"Local Ollama fallback success: {text_model}")
+                else:
+                    # Use local Ollama directly
+                    text_model = self.config['llm']['text_model']
+                    response = ollama.chat(
+                        model=text_model,
+                        messages=[
+                            {
+                                'role': 'system',
+                                'content': 'You are a robot assistant. The user is giving you a system command. Use the available tools to execute it. Handle variations and typos intelligently (e.g., "too" → "to", "fifty" → 50).'
+                            },
+                            {
+                                'role': 'user',
+                                'content': question
+                            }
+                        ],
+                        tools=TOOL_DEFINITIONS,
+                        options={
+                            'num_ctx': 2048,
+                            'temperature': 0.3,
+                            'num_predict': 80
                         }
-                    ],
-                    tools=TOOL_DEFINITIONS,  # All commands get tools for intelligent parsing
-                    options={
-                        'num_ctx': 2048,
-                        'temperature': 0.3,  # Lower temperature for more precise parsing
-                        'num_predict': 80
-                    }
-                )
+                    )
                 
                 # Check if AI returned tool calls
                 if 'tool_calls' in response.get('message', {}) and execute_tool:
@@ -531,27 +586,78 @@ class AIChatBot:
             else:
                 # NOT a command - regular question, use AI WITHOUT tools
                 self.log("Regular question detected (no command category)")
-                text_model = self.config['llm']['text_model']
                 
-                response = ollama.chat(
-                    model=text_model,
-                    messages=[
-                        {
-                            'role': 'system',
-                            'content': 'You are a helpful robot. Give direct, concise answers. Maximum 2 sentences. No extra formatting or explanations.'
-                        },
-                        {
-                            'role': 'user',
-                            'content': question
+                # Try network Ollama first if configured
+                if self.use_network_ollama:
+                    text_model = self.config['ollama']['network_text_model']
+                    self.log(f"Using network Ollama for chat: {text_model}")
+                    
+                    try:
+                        response = self.ollama_client.chat(
+                            model=text_model,
+                            messages=[
+                                {
+                                    'role': 'system',
+                                    'content': 'You are a helpful robot. Give direct, concise answers. Maximum 2 sentences. No extra formatting or explanations.'
+                                },
+                                {
+                                    'role': 'user',
+                                    'content': question
+                                }
+                            ],
+                            options={
+                                'num_ctx': 2048,
+                                'temperature': 0.7,
+                                'num_predict': 50
+                            }
+                        )
+                        self.log("Network Ollama success")
+                    
+                    except (ConnectionError, TimeoutError, Exception) as e:
+                        # Network failed - fall back to local
+                        self.log(f"Network Ollama failed: {e}, falling back to local", "WARN")
+                        text_model = self.config['llm']['text_model']
+                        
+                        response = ollama.chat(
+                            model=text_model,
+                            messages=[
+                                {
+                                    'role': 'system',
+                                    'content': 'You are a helpful robot. Give direct, concise answers. Maximum 2 sentences. No extra formatting or explanations.'
+                                },
+                                {
+                                    'role': 'user',
+                                    'content': question
+                                }
+                            ],
+                            options={
+                                'num_ctx': 2048,
+                                'temperature': 0.7,
+                                'num_predict': 50
+                            }
+                        )
+                        self.log(f"Local Ollama fallback success: {text_model}")
+                else:
+                    # Use local Ollama directly
+                    text_model = self.config['llm']['text_model']
+                    response = ollama.chat(
+                        model=text_model,
+                        messages=[
+                            {
+                                'role': 'system',
+                                'content': 'You are a helpful robot. Give direct, concise answers. Maximum 2 sentences. No extra formatting or explanations.'
+                            },
+                            {
+                                'role': 'user',
+                                'content': question
+                            }
+                        ],
+                        options={
+                            'num_ctx': 2048,
+                            'temperature': 0.7,
+                            'num_predict': 50
                         }
-                    ],
-                    # NO TOOLS - prevents JSON confusion
-                    options={
-                        'num_ctx': 2048,
-                        'temperature': 0.7,
-                        'num_predict': 50
-                    }
-                )
+                    )
                 
                 # Regular chat response
                 answer = response['message']['content']
@@ -1042,14 +1148,17 @@ class AIChatBot:
     def run(self):
         """Main run loop"""
         self.log("AI Chatbot service started")
+        self.log("="*50)
+        self.log("AI Chatbot Service Started")
         self.log(f"ASR: VOSK (model: {VOSK_MODEL_PATH})")
-        self.log(f"Text LLM: {self.config['llm']['text_model']}")
-        
+        self.log(f"Text LLM: {self.config['llm']['text_model']} (local)")
         if self.use_network_ollama:
-            self.log(f"Vision LLM: {self.config['ollama']['network_vision_model']} (network) with fallback to {self.config['llm']['vision_model']} (local)")
-            self.log(f"Network Ollama: {self.config['ollama']['ollama_host']}")
+            self.log(f"Network Text LLM: {self.config['ollama']['network_text_model']} @ {self.config['ollama']['ollama_host']} (with fallback to local)")
+            self.log(f"Network Vision LLM: {self.config['ollama']['network_vision_model']} @ {self.config['ollama']['ollama_host']} (with fallback to {self.config['llm']['vision_model']})")
         else:
-            self.log(f"Vision LLM: {self.config['llm']['vision_model']} (local)")
+            self.log(f"Vision LLM: {self.config['llm']['vision_model']} (local only)")
+            # Log network Ollama host even if not using network LLMs, for info
+            self.log(f"Network Ollama Host: {self.config['ollama']['ollama_host']}")
         
         # Start wake word detection if enabled
         if self.wake_word_enabled and WAKE_WORD_AVAILABLE:

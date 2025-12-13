@@ -27,10 +27,15 @@ Automated setup to replicate a Yocto-based AI robot system on Raspberry Pi OS (D
 - **Camera Vision:** Press K3 to capture and describe what the camera sees
 - **Text-to-Speech:** Natural-sounding Piper neural TTS
 - **Speech Recognition:** Offline VOSK ASR (no internet required after setup)
-- **LLM:** Ollama with Llama 3.2:1b (text) and Moondream/qwen3-vl (vision) models
+- **LLM:** Ollama with Llama 3.2 (text) and Moondream/qwen3-vl (vision) models
   - **Local Mode:** All processing on RPi5 (fully offline)
-  - **Network Mode:** Optional network GPU server for 30x faster vision (2s vs 60s)
-  - **Auto-Fallback:** Automatic fallback to local on network failure
+    - Text: Llama 3.2:1b (~3-5s responses)
+    - Vision: Moondream (~60s per image)
+  - **Network Mode:** Optional network GPU server for faster responses
+    - Text: Llama 3.2:3b on network server (~1-2s responses, 2-3x faster)
+    - Vision: qwen3-vl on network server (~2s per image, 30x faster)
+  - **Auto-Fallback:** Automatic fallback to local models on network failure
+  - **Smart Command Optimization:** Camera commands execute instantly (no LLM delay)
 - **Robot Face GUI:** QML-based display with animated eyes, touch interaction
 - **Flexible Deployment:** Choose between fully offline or network-accelerated vision
 
@@ -257,7 +262,7 @@ sudo systemctl restart ai-chatbot
 
 ### Network Ollama Setup (Optional)
 
-For 30x faster image processing, configure a network GPU server:
+For faster AI responses, configure a network GPU server for both text chat and vision:
 
 **1. Edit configuration:**
 ```bash
@@ -269,7 +274,9 @@ sudo nano /etc/ai-chatbot/config.ini
 [ollama]
 # Use 'local' for local Ollama, or 'IP:PORT' for network server
 ollama_host = 192.168.2.170:11434
-# Vision model on network server (e.g., qwen3-vl, llava, etc.)
+# Text model on network server (e.g., llama3.2:3b, qwen2.5:7b)
+network_text_model = llama3.2:3b
+# Vision model on network server (e.g., qwen3-vl, llava)
 network_vision_model = qwen3-vl
 # Connection timeout (seconds)
 network_timeout = 5
@@ -281,8 +288,12 @@ sudo systemctl restart ai-chatbot
 ```
 
 **Performance Comparison:**
-| Mode | Model | Processing Time |
-|------|-------|----------------|
+| Mode | Model | Task | Processing Time |
+|------|-------|------|----------------|
+| Local | llama3.2:1b | Text chat | ~3-5s |
+| Network | llama3.2:3b | Text chat | ~1-2s (2-3x faster) |
+| Local | moondream | Vision | ~60s |
+| Network | qwen3-vl | Vision | ~2s (30x faster) |
 | Network (GPU) | qwen3-vl | ~2 seconds |
 | Local (RPi5) | moondream | ~60 seconds |
 | Fallback | moondream | ~60 seconds |
@@ -302,6 +313,31 @@ sudo systemctl restart ai-chatbot
 | **Total** | **~5.5GB** |
 
 **Recommended:** 16GB+ storage for comfortable operation and future model updates.
+
+### Network Server Requirements
+
+On your network server, ensure models are pulled:
+```bash
+ollama pull llama3.2:3b
+ollama pull qwen3-vl
+```
+
+## Known Issues
+
+### Wake Word Stability (Network Mode)
+When using network Ollama for text chat, the wake word detection may become unresponsive after 2-3 interactions. **Workaround:** Restart the service:
+```bash
+sudo systemctl restart ai-chatbot
+```
+This is a threading/synchronization issue under investigation. Local ollama mode is stable.
+
+### Display Indicator Stuck
+The mic indicator on the QML display may occasionally remain visible after "no speech detected" events. **Workaround:** Restart the display service:
+```bash
+sudo systemctl restart shatrox-display
+```
+
+---
 
 ## Troubleshooting
 
