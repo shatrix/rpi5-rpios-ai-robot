@@ -55,6 +55,17 @@ OBSTACLE_DISTANCE_CM = 20  # Stop if obstacle closer than this (cm)
 SENSOR_READ_INTERVAL = 0.1  # Read sensor every 100ms
 MAX_SENSOR_DISTANCE = 400   # HC-SR04-P max range
 
+# Obstacle avoidance behavior modes
+OBSTACLE_BEHAVIOR_STOP = "stop_only"       # Just stop when obstacle detected
+OBSTACLE_BEHAVIOR_BACKUP = "backup"        # Stop + back up
+OBSTACLE_BEHAVIOR_AVOID = "backup_and_turn" # Stop + back up + turn (full avoidance)
+
+# Avoidance timing (seconds)
+BACKUP_DURATION = 1.0      # How long to back up
+BACKUP_SPEED = 40          # Speed when backing up (0-100)
+AVOID_TURN_DURATION = 0.5  # How long to turn when avoiding
+AVOID_TURN_SPEED = 50      # Speed when turning to avoid
+
 # Speed limits (0-100%)
 DEFAULT_SPEED = 50
 MAX_SPEED = 100
@@ -84,6 +95,11 @@ class MotorController:
         self.current_speed = DEFAULT_SPEED
         self.sensor_thread = None
         self.socket_thread = None
+        
+        # Obstacle avoidance settings
+        self.obstacle_behavior = OBSTACLE_BEHAVIOR_AVOID  # Default: full avoidance
+        self.is_moving_forward = False  # Track if actively moving forward
+        self.avoidance_in_progress = False  # Prevent re-triggering during avoidance
         
         # Initialize logging
         self.log("Motor Controller initializing...")
@@ -220,6 +236,7 @@ class MotorController:
     def obstacle_monitoring_loop(self):
         """Background thread to continuously monitor for obstacles"""
         self.log("Obstacle monitoring started")
+        self.last_turn_was_left = False  # Alternate turn direction to avoid loops
         
         while self.running:
             try:
@@ -227,9 +244,15 @@ class MotorController:
                 
                 if distance < OBSTACLE_DISTANCE_CM:
                     if not self.obstacle_detected:
-                        self.log(f"OBSTACLE DETECTED at {distance:.1f}cm - STOPPING", "WARNING")
+                        self.log(f"OBSTACLE DETECTED at {distance:.1f}cm", "WARNING")
                         self.obstacle_detected = True
-                        self.stop()
+                        
+                        # Only perform avoidance if we were moving forward
+                        if self.is_moving_forward and not self.avoidance_in_progress:
+                            self.perform_obstacle_avoidance()
+                        else:
+                            # Just stop if not moving forward or already avoiding
+                            self.stop()
                 else:
                     if self.obstacle_detected:
                         self.log(f"Obstacle cleared ({distance:.1f}cm)")
@@ -242,6 +265,85 @@ class MotorController:
                 time.sleep(1)
         
         self.log("Obstacle monitoring stopped")
+    
+    
+    def perform_obstacle_avoidance(self):
+        """
+        Execute obstacle avoidance routine based on configured behavior mode.
+        Called when obstacle detected while moving forward.
+        """
+        self.avoidance_in_progress = True
+        self.is_moving_forward = False
+        
+        try:
+            # First, always stop
+            self.stop()
+            self.log(f"Avoidance: behavior={self.obstacle_behavior}")
+            
+            if self.obstacle_behavior == OBSTACLE_BEHAVIOR_STOP:
+                # Just stop - no further action
+                self.log("Avoidance: stop only")
+            
+            elif self.obstacle_behavior == OBSTACLE_BEHAVIOR_BACKUP:
+                # Back up only
+                self.log(f"Avoidance: backing up for {BACKUP_DURATION}s")
+                time.sleep(0.2)  # Brief pause before reversing
+                self._raw_move_backward(BACKUP_SPEED, BACKUP_DURATION)
+            
+            elif self.obstacle_behavior == OBSTACLE_BEHAVIOR_AVOID:
+                # Full avoidance: back up + turn
+                self.log(f"Avoidance: backing up for {BACKUP_DURATION}s")
+                time.sleep(0.2)  # Brief pause before reversing
+                self._raw_move_backward(BACKUP_SPEED, BACKUP_DURATION)
+                
+                # Alternate turn direction to avoid getting stuck
+                if self.last_turn_was_left:
+                    self.log(f"Avoidance: turning RIGHT for {AVOID_TURN_DURATION}s")
+                    self._raw_turn_right(AVOID_TURN_SPEED, AVOID_TURN_DURATION)
+                    self.last_turn_was_left = False
+                else:
+                    self.log(f"Avoidance: turning LEFT for {AVOID_TURN_DURATION}s")
+                    self._raw_turn_left(AVOID_TURN_SPEED, AVOID_TURN_DURATION)
+                    self.last_turn_was_left = True
+                
+                self.log("Avoidance complete")
+        
+        except Exception as e:
+            self.log(f"Avoidance error: {e}", "ERROR")
+            self.stop()
+        
+        finally:
+            self.avoidance_in_progress = False
+    
+    
+    def _raw_move_backward(self, speed: int, duration: float):
+        """Internal: move backward without obstacle checks (for avoidance)"""
+        self.set_motor_speed(0, speed)
+        self.set_motor_speed(1, speed)
+        self.set_motor_direction(0, 'backward')
+        self.set_motor_direction(1, 'backward')
+        time.sleep(duration)
+        self.stop()
+    
+    
+    def _raw_turn_left(self, speed: int, duration: float):
+        """Internal: turn left without stopping (for avoidance)"""
+        self.set_motor_speed(0, speed)
+        self.set_motor_speed(1, speed)
+        self.set_motor_direction(0, 'backward')
+        self.set_motor_direction(1, 'forward')
+        time.sleep(duration)
+        self.stop()
+    
+    
+    def _raw_turn_right(self, speed: int, duration: float):
+        """Internal: turn right without stopping (for avoidance)"""
+        self.set_motor_speed(0, speed)
+        self.set_motor_speed(1, speed)
+        self.set_motor_direction(0, 'forward')
+        self.set_motor_direction(1, 'backward')
+        time.sleep(duration)
+        self.stop()
     
     
     def set_motor_direction(self, motor, direction):
@@ -290,6 +392,7 @@ class MotorController:
     def stop(self):
         """Stop all motors immediately"""
         self.log("STOP")
+        self.is_moving_forward = False  # Clear forward movement flag
         try:
             # Stop both motors
             self.set_motor_speed(0, 0)  # Left
@@ -304,6 +407,7 @@ class MotorController:
         """
         Move forward at specified speed (0-100%)
         If duration > 0, move for that many seconds then stop
+        If duration == 0, continue moving until stop() is called
         """
         if self.obstacle_detected:
             self.log("Cannot move forward: obstacle detected", "WARNING")
@@ -311,6 +415,9 @@ class MotorController:
         
         speed = speed or self.current_speed
         speed = max(MIN_SPEED, min(MAX_SPEED, speed))
+        
+        # Set flag BEFORE starting movement (for obstacle detection)
+        self.is_moving_forward = True
         
         self.log(f"FORWARD at {speed}%")
         self.set_motor_speed(0, speed)  # Left speed first
@@ -320,7 +427,7 @@ class MotorController:
         
         if duration > 0:
             time.sleep(duration)
-            self.stop()
+            self.stop()  # This will clear is_moving_forward
         
         return True
     
@@ -461,6 +568,32 @@ class MotorController:
             elif action == "test_motors":
                 self.test_motors()
                 return {"status": "ok", "action": "test"}
+            
+            elif action == "set_obstacle_behavior":
+                # Set obstacle avoidance behavior mode
+                behavior = command.get("behavior", "")
+                valid_behaviors = [OBSTACLE_BEHAVIOR_STOP, OBSTACLE_BEHAVIOR_BACKUP, OBSTACLE_BEHAVIOR_AVOID]
+                if behavior in valid_behaviors:
+                    self.obstacle_behavior = behavior
+                    self.log(f"Obstacle behavior set to: {behavior}")
+                    return {"status": "ok", "behavior": behavior}
+                else:
+                    return {"status": "error", "message": f"Invalid behavior. Use: {valid_behaviors}"}
+            
+            elif action == "get_obstacle_behavior":
+                return {"status": "ok", "behavior": self.obstacle_behavior}
+            
+            elif action == "get_status":
+                # Get full motor controller status
+                distance = self.read_distance()
+                return {
+                    "status": "ok",
+                    "distance_cm": distance,
+                    "obstacle_detected": self.obstacle_detected,
+                    "obstacle_behavior": self.obstacle_behavior,
+                    "is_moving_forward": self.is_moving_forward,
+                    "avoidance_in_progress": self.avoidance_in_progress
+                }
             
             else:
                 return {"status": "error", "message": f"Unknown action: {action}"}

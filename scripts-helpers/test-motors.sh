@@ -64,6 +64,13 @@ while true; do
     echo "  7) Run full motor test sequence"
     echo "  8) Check I2C devices"
     echo "  9) View motor service logs"
+    echo "──────────────────────────────────────────────────────────"
+    echo "  Obstacle Avoidance:"
+    echo "  a) Get full status (distance, behavior, state)"
+    echo "  b) Set behavior: STOP ONLY"
+    echo "  c) Set behavior: BACKUP"
+    echo "  d) Set behavior: BACKUP + TURN (full avoidance)"
+    echo "──────────────────────────────────────────────────────────"
     echo "  0) Exit"
     echo "──────────────────────────────────────────────────────────"
     read -p "Select option: " choice
@@ -122,6 +129,26 @@ while true; do
         0)
             echo "Exiting..."
             exit 0
+            ;;
+        a|A)
+            echo "→ Getting motor controller status..."
+            send_motor_command '{"action":"get_status"}'
+            echo ""
+            ;;
+        b|B)
+            echo "→ Setting obstacle behavior to: STOP ONLY"
+            send_motor_command '{"action":"set_obstacle_behavior","behavior":"stop_only"}'
+            echo ""
+            ;;
+        c|C)
+            echo "→ Setting obstacle behavior to: BACKUP"
+            send_motor_command '{"action":"set_obstacle_behavior","behavior":"backup"}'
+            echo ""
+            ;;
+        d|D)
+            echo "→ Setting obstacle behavior to: BACKUP + TURN (full avoidance)"
+            send_motor_command '{"action":"set_obstacle_behavior","behavior":"backup_and_turn"}'
+            echo ""
             ;;
         *)
             echo "❌ Invalid option"

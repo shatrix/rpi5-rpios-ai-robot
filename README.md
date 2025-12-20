@@ -341,6 +341,33 @@ gpioinfo gpiochip4 | grep -E "line +17|line +27"
 sudo systemctl status shatrox-motor-control
 ```
 
+### Obstacle Avoidance
+
+The robot automatically detects obstacles using the HC-SR04-P ultrasonic sensor and can respond with configurable behavior:
+
+| Behavior Mode | Description |
+|---------------|-------------|
+| `stop_only` | Stop immediately when obstacle detected |
+| `backup` | Stop, then back up for 1 second |
+| `backup_and_turn` | Stop, back up, then turn (alternates left/right) - **DEFAULT** |
+
+**Configure obstacle behavior via socket:**
+```python
+# Set to stop-only mode
+send_motor_command({"action": "set_obstacle_behavior", "behavior": "stop_only"})
+
+# Set to backup mode
+send_motor_command({"action": "set_obstacle_behavior", "behavior": "backup"})
+
+# Set to full avoidance (default)
+send_motor_command({"action": "set_obstacle_behavior", "behavior": "backup_and_turn"})
+
+# Get current status (distance, behavior, state)
+send_motor_command({"action": "get_status"})
+```
+
+**Note:** Obstacle avoidance only triggers when the robot is actively moving forward. Backward movement and turns are not affected.
+
 
 
 ### Network Ollama Setup (Optional)
