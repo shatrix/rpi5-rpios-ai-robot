@@ -25,7 +25,10 @@ apt install -y \
 echo "→ Installing audio support (ALSA)..."
 apt install -y \
     alsa-utils \
-    libasound2-dev
+    portaudio19-dev \
+    i2c-tools \
+    python3-smbus \
+    libi2c-dev
 
 echo "→ Installing Qt5 and QML for display..."
 apt install -y \

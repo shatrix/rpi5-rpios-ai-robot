@@ -59,6 +59,13 @@ pip3 install --break-system-packages ollama gpiod
 echo "→ Installing Python service scripts..."
 smart_install 0755 "$SCRIPT_DIR/python/ai-chatbot.py" /usr/local/bin/ai-chatbot.py
 smart_install 0755 "$SCRIPT_DIR/python/shatrox-buttons.py" /usr/local/bin/shatrox-buttons.py
+smart_install 0755 "$SCRIPT_DIR/python/motor_controller.py" /usr/local/bin/motor_controller.py
+
+# Install Waveshare PCA9685 library for motor control
+if [ -f "$SCRIPT_DIR/python/WavesharePCA9685.py" ]; then
+    smart_install 0644 "$SCRIPT_DIR/python/WavesharePCA9685.py" /usr/local/lib/python3.13/dist-packages/WavesharePCA9685.py
+    echo "✓ Waveshare PCA9685 library installed"
+fi
 
 echo "✓ Python scripts installed"
 
@@ -102,6 +109,7 @@ smart_install 644 "${SCRIPT_DIR}/services/shatrox-display.service" /etc/systemd/
 smart_install 644 "${SCRIPT_DIR}/services/shatrox-touch-monitor.service" /etc/systemd/system/shatrox-touch-monitor.service
 smart_install 644 "${SCRIPT_DIR}/services/shatrox-volume-monitor.service" /etc/systemd/system/shatrox-volume-monitor.service
 smart_install 644 "${SCRIPT_DIR}/services/startup-sound.service" /etc/systemd/system/startup-sound.service
+smart_install 644 "${SCRIPT_DIR}/services/shatrox-motor-control.service" /etc/systemd/system/shatrox-motor-control.service
 
 
 # Reload systemd and enable services
@@ -113,6 +121,7 @@ systemctl enable shatrox-display.service
 systemctl enable shatrox-touch-monitor.service
 systemctl enable shatrox-volume-monitor.service
 systemctl enable startup-sound.service
+systemctl enable shatrox-motor-control.service
 
 echo "✓ Services enabled"
 
@@ -146,6 +155,7 @@ echo "    - shatrox-buttons.service (GPIO button monitoring)"
 echo "    - shatrox-display.service (QML robot face)"
 echo "    - shatrox-touch-monitor.service (Touch detection)"
 echo "    - shatrox-volume-monitor.service (Volume display)"
+echo "    - shatrox-motor-control.service (Motor control with obstacle detection)"
 echo ""
 echo "  All services enabled to start on boot"
 echo ""

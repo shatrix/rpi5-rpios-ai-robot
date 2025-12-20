@@ -1,0 +1,26 @@
+[Unit]
+Description=SHATROX Motor Control Service
+Documentation=https://github.com/shatrix/rpi5-rpios-ai-robot
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/home/shatrix/rpi5-rpios-ai-robot/python
+ExecStart=/usr/bin/python3 /usr/local/bin/motor_controller.py
+Restart=on-failure
+RestartSec=5
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=shatrox-motor
+
+# Security (relaxed for GPIO/I2C access)
+PrivateTmp=false
+
+# Resource limits
+MemoryLimit=256M
+
+[Install]
+WantedBy=multi-user.target

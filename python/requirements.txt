@@ -21,6 +21,13 @@ webrtcvad>=2.0.10
 # GPIO and System
 gpiod>=2.0.0
 
+# Motor Control (Waveshare Motor Driver HAT)
+adafruit-circuitpython-pca9685>=3.4.0
+adafruit-circuitpython-motor>=3.4.0
+adafruit-blinka>=8.0.0
+
 # Note: System dependencies installed via apt in 01-system-dependencies.sh
 #   - libgpiod-dev (required for gpiod Python package)
 #   - portaudio19-dev (required for pyaudio package)
+#   - i2c-tools (required for I2C motor HAT)
+#   - python3-smbus (required for I2C communication)

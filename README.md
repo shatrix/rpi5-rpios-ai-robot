@@ -9,6 +9,9 @@ Automated setup to replicate a Yocto-based AI robot system on Raspberry Pi OS (D
 - **Camera:** Raspberry Pi Camera Module 3 (IMX708)
 - **Audio:** USB Microphone and Speakers
 - **Buttons:** 8x GPIO buttons (K1-K8) on GPIO pins: 5, 6, 13, 19, 26
+- **Motor Control:** Waveshare Motor Driver HAT (I2C, PCA9685 PWM, TB6612FNG H-bridge)
+- **Motors:** 4x DC motors (paired: 2 left, 2 right) powered by 7.2V battery
+- **Sensor:** HC-SR04-P ultrasonic sensor (3.3V) on GPIO 22 (trigger) / 23 (echo)
 - **Storage:** 16GB+ SD card or NVMe SSD (32GB+ recommended for models)
 - **Cooling:** Official RPi 5 Active Cooler (recommended)
 
@@ -24,8 +27,14 @@ Automated setup to replicate a Yocto-based AI robot system on Raspberry Pi OS (D
   - Time/Date queries: "what time is it?", "what's the date?"
   - Camera trigger: "take a picture"
   - System control: "shutdown system"
+  - **Motor control (Coming Soon):** "move forward", "turn left", "explore the area"
 - **Camera Vision:** Press K3 to capture and describe what the camera sees
   - **Photo Overlay:** Captured images display on-screen for 5 seconds with fade animations
+- **Motor Control:** Autonomous movement with obstacle detection
+  - **4 DC Motors:** Tank-style differential drive (left/right channels)
+  - **Ultrasonic Sensor:** HC-SR04-P for obstacle detection (20cm safety distance)
+  - **Auto-Stop:** Automatically stops when obstacles detected
+  - **Movement Commands:** Forward, backward, turn left, turn right via socket API
 - **Text-to-Speech:** Natural-sounding Piper neural TTS
 - **Speech Recognition:** Offline VOSK ASR (no internet required after setup)
 - **LLM:** Ollama with Llama 3.2 (text) and Moondream/qwen3-vl (vision) models
@@ -249,17 +258,90 @@ All services are managed by systemd:
 
 ```bash
 # Check status
-sudo systemctl status ollama ai-chatbot shatrox-buttons shatrox-display
+sudo systemctl status ollama ai-chatbot shatrox-buttons shatrox-display shatrox-motor-control
 
 # View logs
 sudo journalctl -u ai-chatbot -f
 sudo journalctl -u shatrox-buttons -f
+sudo journalctl -u shatrox-motor-control -f
 
 # Restart service
 sudo systemctl restart ai-chatbot
+sudo systemctl restart shatrox-motor-control
 ```
 
-## Configuration
+## Motor Control
+
+The robot supports autonomous movement via the Waveshare Motor Driver HAT with obstacle detection.
+
+### Testing Motors
+
+**Interactive Test Menu:**
+```bash
+# Run interactive motor test utility
+sudo bash scripts-helpers/test-motors.sh
+```
+
+**Manual Testing:**
+```bash
+# Test distance sensor
+sudo python3 -c "from motor_controller import MotorController; mc=MotorController(); print(f'Distance: {mc.read_distance():.1f}cm')"
+
+# Run full motor test sequence
+sudo python3 /usr/local/bin/motor_controller.py --demo
+
+# Test individual movements via Python
+sudo python3 << EOF
+from motor_controller import MotorController
+mc = MotorController()
+mc.move_forward(speed=50, duration=2)  # Forward 2 seconds
+mc.turn_left(speed=50, angle=90)        # Turn left 90°
+mc.stop()
+EOF
+```
+
+### Programmatic Control
+
+Send JSON commands via Unix socket (`/tmp/shatrox-motor-control.sock`):
+
+```python
+import socket, json
+
+def send_motor_command(command_dict):
+    sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    sock.connect('/tmp/shatrox-motor-control.sock')
+    sock.sendall(json.dumps(command_dict).encode())
+    response = json.loads(sock.recv(1024).decode())
+    sock.close()
+    return response
+
+# Move forward at 50% speed for 3 seconds
+send_motor_command({"action": "move_forward", "speed": 50, "duration": 3})
+
+# Turn right 90 degrees
+send_motor_command({"action": "turn_right", "speed": 50, "angle": 90})
+
+# Read distance sensor
+distance = send_motor_command({"action": "get_distance"})
+
+# Emergency stop
+send_motor_command({"action": "stop"})
+```
+
+### Hardware Verification
+
+```bash
+# Check I2C devices (Motor HAT should appear at 0x40)
+sudo i2cdetect -y 1
+
+# Verify sensor GPIO pins
+gpioinfo gpiochip4 | grep -E "line +17|line +27"
+
+# Check motor service status
+sudo systemctl status shatrox-motor-control
+```
+
+
 
 ### Network Ollama Setup (Optional)
 
