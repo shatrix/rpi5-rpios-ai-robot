@@ -71,6 +71,10 @@ while true; do
     echo "  c) Set behavior: BACKUP"
     echo "  d) Set behavior: BACKUP + TURN (full avoidance)"
     echo "──────────────────────────────────────────────────────────"
+    echo "  Explore Mode:"
+    echo "  e) START EXPLORE (continuous movement + auto-avoidance)"
+    echo "  s) STOP EXPLORE"
+    echo "──────────────────────────────────────────────────────────"
     echo "  0) Exit"
     echo "──────────────────────────────────────────────────────────"
     read -p "Select option: " choice
@@ -150,9 +154,23 @@ while true; do
             send_motor_command '{"action":"set_obstacle_behavior","behavior":"backup_and_turn"}'
             echo ""
             ;;
+        e|E)
+            echo "→ Starting EXPLORE MODE..."
+            echo "  Robot will move continuously and avoid obstacles automatically."
+            echo "  Press 's' or '6' to stop."
+            echo ""
+            send_motor_command '{"action":"explore_start"}'
+            echo ""
+            ;;
+        s|S)
+            echo "→ Stopping EXPLORE MODE..."
+            send_motor_command '{"action":"stop"}'
+            echo ""
+            ;;
         *)
             echo "❌ Invalid option"
             echo ""
             ;;
     esac
 done
+

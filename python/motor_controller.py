@@ -100,6 +100,7 @@ class MotorController:
         self.obstacle_behavior = OBSTACLE_BEHAVIOR_AVOID  # Default: full avoidance
         self.is_moving_forward = False  # Track if actively moving forward
         self.avoidance_in_progress = False  # Prevent re-triggering during avoidance
+        self.explore_mode = False  # When True, auto-resume forward after obstacle avoidance
         
         # Initialize logging
         self.log("Motor Controller initializing...")
@@ -276,8 +277,8 @@ class MotorController:
         self.is_moving_forward = False
         
         try:
-            # First, always stop
-            self.stop()
+            # First, always stop motors (but preserve explore_mode)
+            self._stop_motors()
             self.log(f"Avoidance: behavior={self.obstacle_behavior}")
             
             if self.obstacle_behavior == OBSTACLE_BEHAVIOR_STOP:
@@ -310,10 +311,17 @@ class MotorController:
         
         except Exception as e:
             self.log(f"Avoidance error: {e}", "ERROR")
-            self.stop()
+            self._stop_motors()
         
         finally:
             self.avoidance_in_progress = False
+            
+            # EXPLORE MODE: Auto-resume forward movement after avoidance
+            if self.explore_mode and self.running:
+                self.log("Explore mode: resuming forward movement")
+                time.sleep(0.5)  # Brief pause to let sensor settle
+                # Use raw forward that bypasses obstacle check (we just avoided, so try moving)
+                self._raw_move_forward_continuous(speed=50)
     
     
     def _raw_move_backward(self, speed: int, duration: float):
@@ -323,27 +331,37 @@ class MotorController:
         self.set_motor_direction(0, 'backward')
         self.set_motor_direction(1, 'backward')
         time.sleep(duration)
-        self.stop()
+        self._stop_motors()  # Don't clear explore_mode
+    
+    
+    def _raw_move_forward_continuous(self, speed: int):
+        """Internal: start continuous forward without obstacle check (for explore resume)"""
+        self.is_moving_forward = True
+        self.log(f"FORWARD at {speed}% (explore resume)")
+        self.set_motor_speed(0, speed)
+        self.set_motor_speed(1, speed)
+        self.set_motor_direction(0, 'forward')
+        self.set_motor_direction(1, 'forward')
     
     
     def _raw_turn_left(self, speed: int, duration: float):
-        """Internal: turn left without stopping (for avoidance)"""
+        """Internal: turn left without clearing explore_mode (for avoidance)"""
         self.set_motor_speed(0, speed)
         self.set_motor_speed(1, speed)
         self.set_motor_direction(0, 'backward')
         self.set_motor_direction(1, 'forward')
         time.sleep(duration)
-        self.stop()
+        self._stop_motors()  # Don't clear explore_mode
     
     
     def _raw_turn_right(self, speed: int, duration: float):
-        """Internal: turn right without stopping (for avoidance)"""
+        """Internal: turn right without clearing explore_mode (for avoidance)"""
         self.set_motor_speed(0, speed)
         self.set_motor_speed(1, speed)
         self.set_motor_direction(0, 'forward')
         self.set_motor_direction(1, 'backward')
         time.sleep(duration)
-        self.stop()
+        self._stop_motors()  # Don't clear explore_mode
     
     
     def set_motor_direction(self, motor, direction):
@@ -389,18 +407,22 @@ class MotorController:
         else:  # Motor B
             self.pca.setDutycycle(self.PWMB, speed)
     
-    def stop(self):
-        """Stop all motors immediately"""
-        self.log("STOP")
-        self.is_moving_forward = False  # Clear forward movement flag
+    def _stop_motors(self):
+        """Internal: Stop motors without clearing explore_mode (for avoidance routines)"""
         try:
-            # Stop both motors
             self.set_motor_speed(0, 0)  # Left
             self.set_motor_speed(1, 0)  # Right
             self.set_motor_direction(0, 'stop')
             self.set_motor_direction(1, 'stop')
         except Exception as e:
-            self.log(f"Stop error: {e}", "ERROR")
+            self.log(f"Stop motors error: {e}", "ERROR")
+    
+    def stop(self):
+        """Stop all motors immediately (clears explore mode)"""
+        self.log("STOP")
+        self.explore_mode = False  # Clear explore mode on explicit stop
+        self.is_moving_forward = False  # Clear forward movement flag
+        self._stop_motors()
     
     
     def move_forward(self, speed: int = None, duration: float = 0):
@@ -583,6 +605,24 @@ class MotorController:
             elif action == "get_obstacle_behavior":
                 return {"status": "ok", "behavior": self.obstacle_behavior}
             
+            elif action == "explore_start":
+                # Start exploration mode: continuous forward with auto-resume after avoidance
+                if self.obstacle_detected:
+                    return {"status": "blocked", "message": "Cannot start exploring - obstacle detected"}
+                
+                self.obstacle_behavior = OBSTACLE_BEHAVIOR_AVOID  # Ensure full avoidance
+                self.explore_mode = True
+                self.log("EXPLORE MODE: Started")
+                self.move_forward(speed=50, duration=0)  # Start continuous forward
+                return {"status": "ok", "action": "explore_start", "message": "Exploration started"}
+            
+            elif action == "explore_stop":
+                # Stop exploration mode
+                self.explore_mode = False
+                self.stop()
+                self.log("EXPLORE MODE: Stopped")
+                return {"status": "ok", "action": "explore_stop", "message": "Exploration stopped"}
+            
             elif action == "get_status":
                 # Get full motor controller status
                 distance = self.read_distance()
@@ -592,7 +632,8 @@ class MotorController:
                     "obstacle_detected": self.obstacle_detected,
                     "obstacle_behavior": self.obstacle_behavior,
                     "is_moving_forward": self.is_moving_forward,
-                    "avoidance_in_progress": self.avoidance_in_progress
+                    "avoidance_in_progress": self.avoidance_in_progress,
+                    "explore_mode": self.explore_mode
                 }
             
             else:

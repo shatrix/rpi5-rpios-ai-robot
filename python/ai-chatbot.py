@@ -550,6 +550,25 @@ class AIChatBot:
                     self.capture_camera()
                     return
                 
+                # OPTIMIZATION: Motor stop/explore bypass LLM (no parameters, prevents AI confusion)
+                if command_category == 'MOTOR_STOP':
+                    self.log("Motor STOP command - executing directly (no LLM needed)")
+                    from system_tools import motor_stop
+                    result = motor_stop()
+                    self.conversation_history.append({"role": "assistant", "content": result})
+                    self.update_qa_display(question=self.current_question, answer=result)
+                    self.speak_answer(result)
+                    return
+                
+                if command_category == 'MOTOR_EXPLORE':
+                    self.log("Motor EXPLORE command - executing directly (no LLM needed)")
+                    from system_tools import motor_explore
+                    result = motor_explore()
+                    self.conversation_history.append({"role": "assistant", "content": result})
+                    self.update_qa_display(question=self.current_question, answer=result)
+                    self.speak_answer(result)
+                    return
+                
                 # STAGE 2: For all other commands, use AI WITH tools to parse details
                 # (TIME, DATE, VOLUME, SHUTDOWN all need LLM for typo handling)
                 self.log(f"Command category detected: {command_category} (needs LLM parsing)")

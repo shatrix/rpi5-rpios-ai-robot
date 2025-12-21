@@ -27,13 +27,17 @@ Automated setup to replicate a Yocto-based AI robot system on Raspberry Pi OS (D
   - Time/Date queries: "what time is it?", "what's the date?"
   - Camera trigger: "take a picture"
   - System control: "shutdown system"
-  - **Motor control (Coming Soon):** "move forward", "turn left", "explore the area"
+  - **Motor control:** "go forward", "move backward", "turn left", "turn right", "stop"
+  - **Explore mode:** "explore" - autonomous roaming with obstacle avoidance (say "stop" to end)
+  - **Distance query:** "how far is the obstacle?"
 - **Camera Vision:** Press K3 to capture and describe what the camera sees
   - **Photo Overlay:** Captured images display on-screen for 5 seconds with fade animations
 - **Motor Control:** Autonomous movement with obstacle detection
   - **4 DC Motors:** Tank-style differential drive (left/right channels)
   - **Ultrasonic Sensor:** HC-SR04-P for obstacle detection (20cm safety distance)
   - **Auto-Stop:** Automatically stops when obstacles detected
+  - **Explore Mode:** Continuous movement with automatic obstacle avoidance
+  - **Voice Control:** Natural language motor commands via AI chatbot
   - **Movement Commands:** Forward, backward, turn left, turn right via socket API
 - **Text-to-Speech:** Natural-sounding Piper neural TTS
 - **Speech Recognition:** Offline VOSK ASR (no internet required after setup)
