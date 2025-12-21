@@ -107,6 +107,10 @@ class AIChatBot:
         self.recording_duration = 5.0  # Default fallback (if VAD disabled)
         self.is_recording = False
         
+        # RELIABILITY FIX: Thread-safe recording state management
+        self.recording_lock = threading.Lock()  # Mutex for recording state changes
+        self.recording_source = None  # 'wake_word' or 'k1_button' - tracks who started recording
+        
         # VAD-based end-of-speech detection
         self.vad = None
         self.last_speech_time = None
@@ -295,47 +299,93 @@ class AIChatBot:
         self.state = new_state
         self.log(f"State: {old_state.value} -> {new_state.value}")
         
-        # DEFENSIVE FIX: Automatically clear listening indicator when leaving LISTENING state
-        # This catches any missed cleanup calls in error paths
+        # RELIABILITY FIX: Clear all recording-related states when leaving LISTENING
+        # Uses mutex lock to ensure thread-safe cleanup
         if old_state == State.LISTENING and new_state != State.LISTENING:
             try:
+                with self.recording_lock:
+                    self.is_recording = False
+                    self.recording_source = None
                 self.update_qa_display(clear=True)
-                self.log("Auto-cleared listening indicator on state transition", "DEBUG")
+                self.log("Auto-cleared recording state on LISTENING exit", "DEBUG")
             except Exception as e:
-                self.log(f"Failed to auto-clear listening indicator: {e}", "WARN")
+                self.log(f"Failed to auto-clear recording state: {e}", "WARN")
+        
+        # DEFENSIVE: Clear display when entering WAKE_LISTENING or IDLE (reset states)
+        if new_state in (State.WAKE_LISTENING, State.IDLE):
+            try:
+                self.update_qa_display(clear=True)
+            except Exception:
+                pass  # Silent cleanup
+        
         self.update_display(new_state.value)
     
     def start_recording(self):
         """Start audio recording (K1 button triggered)"""
-        self.set_state(State.LISTENING)
-        
-        # Show listening indicator on display
-        self.update_qa_display(listening=True)
-        
-        # Clear buffer and start recording
-        self.audio_buffer = []
-        self.recording_start_time = time.time()
-        self.is_recording = True
-        self.recording_duration = 10.0  # K1 button: record for 10 seconds max or until button release
-        
-        # Generate unique filename
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        self.current_audio_file = os.path.join(RECORDINGS_DIR, f"recording_{timestamp}.wav")
-        
-        self.log(f"Started recording (PyAudio buffer mode)")
+        # RELIABILITY FIX: Thread-safe recording with K1 priority
+        with self.recording_lock:
+            # K1 button takes priority - if wake word started recording, take over
+            if self.is_recording:
+                if self.recording_source == 'k1_button':
+                    self.log("K1 start_recording ignored - K1 already recording", "DEBUG")
+                    return
+                else:
+                    # Wake word was recording, K1 takes over (user explicitly pressed button)
+                    self.log("K1 taking over from wake word recording", "INFO")
+            
+            self.set_state(State.LISTENING)
+            
+            # Show listening indicator on display
+            self.update_qa_display(listening=True)
+            
+            # CRITICAL FIX: Disable VAD for K1 button - recording stops on button RELEASE only
+            # This prevents stale VAD state from triggering early stop
+            self.vad = None
+            self.last_speech_time = None
+            self.speech_started = False
+            
+            # Clear buffer and start recording
+            self.audio_buffer = []
+            self.recording_start_time = time.time()
+            self.is_recording = True
+            self.recording_source = 'k1_button'  # Track source for priority handling
+            self.recording_duration = 10.0  # K1 button: record for 10 seconds max or until button release
+            
+            # Generate unique filename
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            self.current_audio_file = os.path.join(RECORDINGS_DIR, f"recording_{timestamp}.wav")
+            
+            self.log(f"Started recording (K1 button, no VAD - waits for release)")
     
     def stop_recording(self):
         """Stop audio recording and save buffer to WAV file"""
-        if not self.is_recording:
-            self.log("Stop recording called but not currently recording")
-            return
+        # RELIABILITY FIX: Thread-safe recording state check
+        with self.recording_lock:
+            if not self.is_recording:
+                self.log("Stop recording called but not currently recording")
+                return
+            
+            # Clear recording flags atomically FIRST to prevent race conditions
+            self.is_recording = False
+            recording_source = self.recording_source  # Save for logging
+            self.recording_source = None
+            
+            # CRITICAL FIX: Reset VAD state to prevent stale values in next session
+            self.vad = None
+            self.last_speech_time = None
+            self.speech_started = False
+            
+            # Copy buffer reference so we can process outside lock
+            audio_data = list(self.audio_buffer)
+            self.audio_buffer = []
+        
+        # Processing happens outside the lock to avoid blocking other threads
+        self.log(f"Stopped recording (was: {recording_source})")
         
         # DEFENSIVE FIX: Use try/finally to ensure cleanup always happens
         try:
-            self.log(f"Stopped recording")
-            
             # Check if we have any audio data
-            if not self.audio_buffer or len(self.audio_buffer) == 0:
+            if not audio_data or len(audio_data) == 0:
                 self.log("No audio data recorded", "WARN")
                 self.update_qa_display(clear=True)  # Clear listening indicator
                 if self.wake_word_enabled:
@@ -343,6 +393,9 @@ class AIChatBot:
                 else:
                     self.set_state(State.IDLE)
                 return
+            
+            # Restore buffer for save function (temporary)
+            self.audio_buffer = audio_data
             
             # Save buffered audio to WAV file
             try:
@@ -373,9 +426,8 @@ class AIChatBot:
                     self.set_state(State.IDLE)
         
         finally:
-            # DEFENSIVE FIX: Always clear recording flag and ensure display is clean
+            # DEFENSIVE FIX: Always ensure display is clean
             # This runs even if there were exceptions above
-            self.is_recording = False
             # Double-check that listening indicator is cleared (defensive)
             try:
                 # Only clear if we're not already in TRANSCRIBING state (which means transcribe succeeded)
@@ -913,45 +965,60 @@ class AIChatBot:
     def wake_word_detected_handler(self):
         """Called when wake word is detected by wake word thread"""
         self.log("🔔 Wake word detected!", "INFO")
-        self.set_state(State.WAKE_DETECTED)
         
-        # Play feedback sound to indicate wake word detected
-        feedback_sound = self.config['wake_word']['feedback_sound']
-        if os.path.exists(feedback_sound):
-            subprocess.Popen(['aplay', feedback_sound], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        
-        # Show visual feedback on QML display (listening indicator)
-        self.update_display("wake_detected", "🔔 Listening for command...")
-        self.update_qa_display(listening=True)
-        
-        # Initialize VAD for end-of-speech detection
-        vad_enabled = self.config['wake_word'].getboolean('vad_enabled', fallback=True)
-        if vad_enabled and VAD_AVAILABLE:
-            aggressiveness = int(self.config['wake_word'].get('vad_aggressiveness', 2))
-            self.vad = webrtcvad.Vad(aggressiveness)
-            self.last_speech_time = time.time()  # Assume wake word was speech
-            self.speech_started = False
-            self.log(f"VAD enabled (aggressiveness={aggressiveness})")
-        else:
-            self.vad = None
-            self.log("VAD disabled, using timer-based recording")
-        
-        # Start recording command (uses PyAudio buffer)
-        self.audio_buffer = []
-        self.recording_start_time = time.time()
-        self.is_recording = True
-        self.recording_duration = float(self.config['wake_word'].get('max_recording_time', 10))
-        
-        # Generate filename
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        self.current_audio_file = os.path.join(RECORDINGS_DIR, f"recording_{timestamp}.wav")
-        
-        self.set_state(State.LISTENING)
-        if self.vad:
-            silence_threshold = float(self.config['wake_word'].get('silence_threshold', 0.8))
-            self.log(f"Recording... (stop after {silence_threshold}s silence, max {self.recording_duration}s)")
-        else:
-            self.log(f"Recording command for {self.recording_duration}s...")
+        # RELIABILITY FIX: Thread-safe check - K1 button has priority
+        with self.recording_lock:
+            if self.is_recording:
+                if self.recording_source == 'k1_button':
+                    # K1 button is active - don't interrupt (user explicitly pressed button)
+                    self.log("Wake word ignored - K1 button recording active", "DEBUG")
+                    return
+                else:
+                    # Already recording from previous wake word - ignore duplicate detection
+                    self.log("Wake word ignored - already recording from wake word", "DEBUG")
+                    return
+            
+            # Start recording with wake word source
+            self.set_state(State.WAKE_DETECTED)
+            
+            # Play feedback sound to indicate wake word detected
+            feedback_sound = self.config['wake_word']['feedback_sound']
+            if os.path.exists(feedback_sound):
+                subprocess.Popen(['aplay', feedback_sound], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            
+            # Show visual feedback on QML display (listening indicator)
+            self.update_display("wake_detected", "🔔 Listening for command...")
+            self.update_qa_display(listening=True)
+            
+            # Initialize VAD for end-of-speech detection
+            vad_enabled = self.config['wake_word'].getboolean('vad_enabled', fallback=True)
+            if vad_enabled and VAD_AVAILABLE:
+                aggressiveness = int(self.config['wake_word'].get('vad_aggressiveness', 2))
+                self.vad = webrtcvad.Vad(aggressiveness)
+                self.last_speech_time = time.time()  # Assume wake word was speech
+                self.speech_started = False
+                self.log(f"VAD enabled (aggressiveness={aggressiveness})")
+            else:
+                self.vad = None
+                self.log("VAD disabled, using timer-based recording")
+            
+            # Start recording command (uses PyAudio buffer)
+            self.audio_buffer = []
+            self.recording_start_time = time.time()
+            self.is_recording = True
+            self.recording_source = 'wake_word'  # Track source for priority handling
+            self.recording_duration = float(self.config['wake_word'].get('max_recording_time', 10))
+            
+            # Generate filename
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            self.current_audio_file = os.path.join(RECORDINGS_DIR, f"recording_{timestamp}.wav")
+            
+            self.set_state(State.LISTENING)
+            if self.vad:
+                silence_threshold = float(self.config['wake_word'].get('silence_threshold', 0.8))
+                self.log(f"Recording... (stop after {silence_threshold}s silence, max {self.recording_duration}s)")
+            else:
+                self.log(f"Recording command for {self.recording_duration}s...")
     
     def wake_word_loop(self):
         """Wake word detection thread - runs continuously"""
@@ -1197,6 +1264,51 @@ class AIChatBot:
                     self.log(f"Socket server error: {e}", "ERROR")
                 break
     
+    def recording_watchdog(self):
+        """Background thread to detect and recover from stuck recording states"""
+        WATCHDOG_INTERVAL = 5  # Check every 5 seconds
+        STUCK_THRESHOLD = 20   # 20 seconds is definitely stuck (max recording is 10s)
+        
+        # Wait for wake word loop to start (it sets wake_word_running = True)
+        for _ in range(10):  # Max 5 seconds wait
+            if self.wake_word_running:
+                break
+            time.sleep(0.5)
+        
+        if not self.wake_word_running:
+            self.log("Recording watchdog: wake word loop not started, exiting", "WARN")
+            return
+        
+        self.log("Recording watchdog started")
+        
+        while self.wake_word_running:
+            time.sleep(WATCHDOG_INTERVAL)
+            
+            # Check if recording is stuck
+            with self.recording_lock:
+                if self.is_recording and self.recording_start_time:
+                    elapsed = time.time() - self.recording_start_time
+                    if elapsed > STUCK_THRESHOLD:
+                        self.log(f"WATCHDOG: Recording stuck for {elapsed:.1f}s (source: {self.recording_source}) - forcing cleanup", "ERROR")
+                        # Force clear recording state
+                        self.is_recording = False
+                        self.recording_source = None
+                        
+            # Check if display is stuck showing listening indicator when not recording
+            if not self.is_recording and self.state not in (State.LISTENING, State.WAKE_DETECTED, State.TRANSCRIBING, State.ANSWERING, State.SPEAKING):
+                try:
+                    # Read display file and check if it shows listening
+                    if os.path.exists(QA_DISPLAY_FILE):
+                        with open(QA_DISPLAY_FILE, 'r') as f:
+                            content = f.read()
+                        if 'LISTENING' in content:
+                            self.log("WATCHDOG: Stale listening indicator detected - clearing", "WARN")
+                            self.update_qa_display(clear=True)
+                except Exception as e:
+                    pass  # Don't log file read errors in watchdog
+        
+        self.log("Recording watchdog stopped")
+    
     def cleanup(self):
         """Cleanup resources"""
         self.log("Shutting down...")
@@ -1236,6 +1348,10 @@ class AIChatBot:
             self.log(f"Model: {self.config['wake_word']['model_path']}")
             self.wake_word_thread = threading.Thread(target=self.wake_word_loop, daemon=True)
             self.wake_word_thread.start()
+            
+            # Start recording watchdog thread for stuck state recovery
+            self.watchdog_thread = threading.Thread(target=self.recording_watchdog, daemon=True)
+            self.watchdog_thread.start()
         else:
             if not WAKE_WORD_AVAILABLE:
                 self.log("Wake word detection disabled (OpenWakeWord not installed)", "WARN")

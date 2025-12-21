@@ -44,6 +44,8 @@ AI_CHATBOT_SOCKET = "/tmp/ai-chatbot.sock"
 
 last_press_time = {}
 k1_is_recording = False
+k1_recording_start_time = None  # RELIABILITY FIX: Track when K1 recording started
+K1_RECORDING_TIMEOUT = 15  # Seconds - force stop if stuck
 
 # Track which buttons have active threads running
 # Only track K1 (long-running LLM task)
@@ -81,7 +83,7 @@ def send_ai_command(command):
 
 def _handle_button_press_impl(button_name, event_type):
     """Implementation of button press handling (runs in thread)"""
-    global k1_is_recording
+    global k1_is_recording, k1_recording_start_time
     
     try:
         # ----------------------------------------------
@@ -89,23 +91,35 @@ def _handle_button_press_impl(button_name, event_type):
         # ----------------------------------------------
         if button_name == "K1":
             if event_type == EdgeEvent.Type.FALLING_EDGE: # Press
+                # RELIABILITY FIX: Check for stuck recording (timeout recovery)
+                if k1_is_recording and k1_recording_start_time:
+                    elapsed = time.time() - k1_recording_start_time
+                    if elapsed > K1_RECORDING_TIMEOUT:
+                        display_print(f"[K1] Recording timeout ({elapsed:.1f}s) - forcing stop")
+                        send_ai_command("STOP_RECORDING")
+                        k1_is_recording = False
+                        k1_recording_start_time = None
+                
                 if not k1_is_recording:
                     # Start recording
                     display_print("[K1] Starting voice recording (hold to speak)...")
                     send_ai_command("START_RECORDING")
                     k1_is_recording = True
+                    k1_recording_start_time = time.time()  # Track start time
                 else:
                     # TOGGLE FALLBACK: If already recording, stop it
                     # This handles cases where release event wasn't detected
                     display_print("[K1] Stopping recording (toggle fallback)...")
                     send_ai_command("STOP_RECORDING")
                     k1_is_recording = False
+                    k1_recording_start_time = None
             
             elif event_type == EdgeEvent.Type.RISING_EDGE: # Release
                 if k1_is_recording:
                     display_print("[K1] Stopping voice recording...")
                     send_ai_command("STOP_RECORDING")
                     k1_is_recording = False
+                    k1_recording_start_time = None
             return
 
         # ----------------------------------------------
