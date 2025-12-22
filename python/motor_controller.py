@@ -63,8 +63,8 @@ OBSTACLE_BEHAVIOR_AVOID = "backup_and_turn" # Stop + back up + turn (full avoida
 # Avoidance timing (seconds)
 BACKUP_DURATION = 1.0      # How long to back up
 BACKUP_SPEED = 40          # Speed when backing up (0-100)
-AVOID_TURN_DURATION = 0.5  # How long to turn when avoiding
-AVOID_TURN_SPEED = 50      # Speed when turning to avoid
+AVOID_TURN_DURATION = 2.0  # How long to turn when avoiding (Mecanum wheels turn quickly)
+AVOID_TURN_SPEED = 100     # Speed when turning to avoid (full power for tank steering)
 
 # Speed limits (0-100%)
 DEFAULT_SPEED = 50
@@ -345,23 +345,27 @@ class MotorController:
     
     
     def _raw_turn_left(self, speed: int, duration: float):
-        """Internal: turn left without clearing explore_mode (for avoidance)"""
+        """Internal: turn left without clearing explore_mode (for avoidance)
+        MECANUM TANK STEERING: Left backward, Right forward - rotates in place
+        """
         self.set_motor_speed(0, speed)
         self.set_motor_speed(1, speed)
-        self.set_motor_direction(0, 'backward')
-        self.set_motor_direction(1, 'forward')
+        self.set_motor_direction(0, 'backward')  # Left backward
+        self.set_motor_direction(1, 'forward')   # Right forward
         time.sleep(duration)
-        self._stop_motors()  # Don't clear explore_mode
+        self._stop_motors()
     
     
     def _raw_turn_right(self, speed: int, duration: float):
-        """Internal: turn right without clearing explore_mode (for avoidance)"""
+        """Internal: turn right without clearing explore_mode (for avoidance)
+        MECANUM TANK STEERING: Left forward, Right backward - rotates in place
+        """
         self.set_motor_speed(0, speed)
         self.set_motor_speed(1, speed)
-        self.set_motor_direction(0, 'forward')
-        self.set_motor_direction(1, 'backward')
+        self.set_motor_direction(0, 'forward')   # Left forward
+        self.set_motor_direction(1, 'backward')  # Right backward
         time.sleep(duration)
-        self._stop_motors()  # Don't clear explore_mode
+        self._stop_motors()
     
     
     def set_motor_direction(self, motor, direction):
@@ -477,21 +481,21 @@ class MotorController:
     
     def turn_left(self, speed: int = None, angle: float = 90):
         """
-        Turn left by rotating in place (tank steering)
-        Angle is approximate (based on timing, not precise)
+        Turn left using MECANUM TANK STEERING
+        Left side backward, Right side forward - rotates in place
+        Mecanum wheels have angled rollers for smooth rotation
         """
-        speed = speed or self.current_speed
+        speed = speed or 100  # Full power for Mecanum
         speed = max(MIN_SPEED, min(MAX_SPEED, speed))
         
-        # Estimate duration based on angle
-        duration = (angle / 90.0) * 0.5
+        # Mecanum wheels: 5s per 90°
+        duration = (angle / 90.0) * 5.0
         
-        self.log(f"TURN LEFT ~{angle}° at {speed}%")
-        # Left backward, right forward
-        self.set_motor_speed(0, speed)  # Left speed first
-        self.set_motor_speed(1, speed)  # Right speed first
-        self.set_motor_direction(0, 'backward')  # Left direction
-        self.set_motor_direction(1, 'forward')   # Right direction
+        self.log(f"MECANUM TURN LEFT ~{angle}° at {speed}% duration:{duration:.1f}s")
+        self.set_motor_speed(0, speed)
+        self.set_motor_speed(1, speed)
+        self.set_motor_direction(0, 'backward')  # Left backward
+        self.set_motor_direction(1, 'forward')   # Right forward
         
         time.sleep(duration)
         self.stop()
@@ -501,21 +505,21 @@ class MotorController:
     
     def turn_right(self, speed: int = None, angle: float = 90):
         """
-        Turn right by rotating in place (tank steering)
-        Angle is approximate (based on timing, not precise)
+        Turn right using MECANUM TANK STEERING
+        Left side forward, Right side backward - rotates in place
+        Mecanum wheels have angled rollers for smooth rotation
         """
-        speed = speed or self.current_speed
+        speed = speed or 100  # Full power for Mecanum
         speed = max(MIN_SPEED, min(MAX_SPEED, speed))
         
-        # Estimate duration based on angle
-        duration = (angle / 90.0) * 0.5
+        # Mecanum wheels: 5s per 90°
+        duration = (angle / 90.0) * 5.0
         
-        self.log(f"TURN RIGHT ~{angle}° at {speed}%")
-        # Left forward, right backward
-        self.set_motor_speed(0, speed)  # Left speed first
-        self.set_motor_speed(1, speed)  # Right speed first
-        self.set_motor_direction(0, 'forward')   # Left direction
-        self.set_motor_direction(1, 'backward')  # Right direction
+        self.log(f"MECANUM TURN RIGHT ~{angle}° at {speed}% duration:{duration:.1f}s")
+        self.set_motor_speed(0, speed)
+        self.set_motor_speed(1, speed)
+        self.set_motor_direction(0, 'forward')   # Left forward
+        self.set_motor_direction(1, 'backward')  # Right backward
         
         time.sleep(duration)
         self.stop()
