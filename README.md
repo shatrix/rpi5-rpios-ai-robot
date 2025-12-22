@@ -86,6 +86,31 @@ Automated setup to replicate a Yocto-based AI robot system on Raspberry Pi OS (D
 
 </td>
 </tr>
+<tr>
+<td width="50%">
+
+![Complete Robot](images/hardware/complete_robot.jpg)
+*Fully assembled robot with head and body*
+
+</td>
+<td width="50%">
+
+![Robot Open Body](images/hardware/robot_open_body.jpg)
+*Internal components: Motor HAT, battery, and wiring*
+
+</td>
+</tr>
+<tr>
+<td width="50%">
+
+![Robot Wheels](images/hardware/robot_wheels.jpg)
+*Motor and wheel assembly with ultrasonic sensor*
+
+</td>
+<td width="50%">
+
+</td>
+</tr>
 </table>
 
 ## Quick Start
