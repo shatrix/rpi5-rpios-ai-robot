@@ -15,6 +15,8 @@ Automated setup to replicate a Yocto-based AI robot system on Raspberry Pi OS (D
 - **Storage:** 16GB+ SD card or NVMe SSD (32GB+ recommended for models)
 - **Cooling:** Official RPi 5 Active Cooler (recommended)
 
+> 📘 **[Hardware Connections Guide](docs/HARDWARE_CONNECTIONS.md)** - Complete wiring reference with GPIO pinouts, diagrams, and parts list.
+
 ## Features
 
 - **Wake Word:** Hands-free activation with "Hey Jarvis" (OpenWakeWord)
