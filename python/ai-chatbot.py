@@ -1081,11 +1081,11 @@ class AIChatBot:
             self.last_speech_time = time.time()
             self.speech_started = False
             
-            # Pre-populate audio buffer with ring buffer contents (audio BEFORE wake word)
-            self.audio_buffer = list(self.ring_buffer)
+            # Clear ring buffer (it contains the wake word which we don't want transcribed)
+            # Don't pre-populate - start recording fresh AFTER the wake word
             self.ring_buffer.clear()
-            if len(self.audio_buffer) > 0:
-                self.log(f"Pre-populated buffer with {len(self.audio_buffer)} frames of pre-speech audio")
+            self.audio_buffer = []
+            self.log("Ring buffer cleared, starting fresh recording")
             
             self.recording_start_time = time.time()
             self.is_recording = True
