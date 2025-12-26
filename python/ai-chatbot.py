@@ -18,6 +18,7 @@ import wave
 from pathlib import Path
 from datetime import datetime
 from enum import Enum
+from collections import deque
 
 # VOSK imports
 try:
@@ -45,14 +46,26 @@ except ImportError:
     print("Install with: pip3 install openwakeword pyaudio numpy scipy")
     WAKE_WORD_AVAILABLE = False
 
-# Voice Activity Detection for end-of-speech detection
+# Voice Activity Detection - Silero VAD (better than webrtcvad)
 try:
-    import webrtcvad
-    VAD_AVAILABLE = True
+    from pysilero_vad import SileroVoiceActivityDetector
+    SILERO_VAD_AVAILABLE = True
 except ImportError:
-    print("WARNING: webrtcvad not installed. Using timer-based recording.")
-    print("Install with: pip3 install webrtcvad")
-    VAD_AVAILABLE = False
+    print("WARNING: pysilero-vad not installed. Using timer-based recording.")
+    print("Install with: pip3 install pysilero-vad")
+    SILERO_VAD_AVAILABLE = False
+
+# Audio enhancement (noise suppression and auto gain)
+try:
+    from webrtc_noise_gain import AudioProcessor
+    WEBRTC_AUDIO_AVAILABLE = True
+except ImportError:
+    print("WARNING: webrtc-noise-gain not installed. Skipping audio enhancement.")
+    WEBRTC_AUDIO_AVAILABLE = False
+
+# Ring buffer size for pre-speech audio (2 seconds at 48kHz, 16-bit mono)
+RING_BUFFER_SECONDS = 2
+RING_BUFFER_FRAMES = int(48000 * RING_BUFFER_SECONDS / (1280 * 3))  # frames
 
 # System tools for function calling
 try:
@@ -111,10 +124,36 @@ class AIChatBot:
         self.recording_lock = threading.Lock()  # Mutex for recording state changes
         self.recording_source = None  # 'wake_word' or 'k1_button' - tracks who started recording
         
-        # VAD-based end-of-speech detection
-        self.vad = None
+        # Ring buffer for pre-speech audio (captures audio BEFORE wake word)
+        self.ring_buffer = deque(maxlen=RING_BUFFER_FRAMES)
+        
+        # Silero VAD for end-of-speech detection (replaces webrtcvad)
+        self.silero_vad = None
+        self.vad_trigger_count = 0
+        self.vad_trigger_level = int(self.config['wake_word'].get('vad_trigger_level', 2))
         self.last_speech_time = None
         self.speech_started = False
+        
+        # Wake-to-command timeout (seconds to wait for speech after wake word)
+        self.wake_command_timeout = float(self.config['wake_word'].get('wake_command_timeout', 5.0))
+        self.wake_detected_time = None
+        
+        # Refractory period (prevent duplicate wake word triggers)
+        self.refractory_seconds = float(self.config['wake_word'].get('refractory_seconds', 2.0))
+        self.last_wake_word_time = 0
+        
+        # Audio enhancement processor (noise suppression and auto gain)
+        self.audio_processor = None
+        if WEBRTC_AUDIO_AVAILABLE:
+            try:
+                auto_gain = int(self.config['wake_word'].get('audio_auto_gain', 15))
+                noise_suppression = int(self.config['wake_word'].get('audio_noise_suppression', 2))
+                if auto_gain > 0 or noise_suppression > 0:
+                    # AudioProcessor takes positional args: (auto_gain, noise_suppression)
+                    self.audio_processor = AudioProcessor(auto_gain, noise_suppression)
+                    self.log(f"Audio enhancement initialized (auto_gain={auto_gain}, noise_suppression={noise_suppression})")
+            except Exception as e:
+                self.log(f"Failed to init audio enhancement: {e}", "WARN")
         
         # Current Q&A for display
         self.current_question = None
@@ -340,7 +379,8 @@ class AIChatBot:
             
             # CRITICAL FIX: Disable VAD for K1 button - recording stops on button RELEASE only
             # This prevents stale VAD state from triggering early stop
-            self.vad = None
+            self.silero_vad = None
+            self.vad_trigger_count = 0
             self.last_speech_time = None
             self.speech_started = False
             
@@ -371,7 +411,8 @@ class AIChatBot:
             self.recording_source = None
             
             # CRITICAL FIX: Reset VAD state to prevent stale values in next session
-            self.vad = None
+            self.silero_vad = None
+            self.vad_trigger_count = 0
             self.last_speech_time = None
             self.speech_started = False
             
@@ -983,6 +1024,13 @@ class AIChatBot:
     
     def wake_word_detected_handler(self):
         """Called when wake word is detected by wake word thread"""
+        current_time = time.time()
+        
+        # Check refractory period (prevent duplicate triggers)
+        if (current_time - self.last_wake_word_time) < self.refractory_seconds:
+            self.log("Wake word ignored - refractory period", "DEBUG")
+            return
+        
         self.log("🔔 Wake word detected!", "INFO")
         
         # RELIABILITY FIX: Thread-safe check - K1 button has priority
@@ -997,32 +1045,48 @@ class AIChatBot:
                     self.log("Wake word ignored - already recording from wake word", "DEBUG")
                     return
             
+            # Update refractory time
+            self.last_wake_word_time = current_time
+            self.wake_detected_time = current_time
+            
             # Start recording with wake word source
             self.set_state(State.WAKE_DETECTED)
             
-            # Play feedback sound to indicate wake word detected
+            # Play feedback sound to indicate wake word detected (BLOCKING to ensure user hears it)
             feedback_sound = self.config['wake_word']['feedback_sound']
             if os.path.exists(feedback_sound):
-                subprocess.Popen(['aplay', feedback_sound], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                try:
+                    subprocess.run(['aplay', '-q', feedback_sound], timeout=2)
+                    self.log("Played wake feedback sound")
+                except Exception as e:
+                    self.log(f"Failed to play feedback sound: {e}", "WARN")
             
             # Show visual feedback on QML display (listening indicator)
             self.update_display("wake_detected", "🔔 Listening for command...")
             self.update_qa_display(listening=True)
             
-            # Initialize VAD for end-of-speech detection
-            vad_enabled = self.config['wake_word'].getboolean('vad_enabled', fallback=True)
-            if vad_enabled and VAD_AVAILABLE:
-                aggressiveness = int(self.config['wake_word'].get('vad_aggressiveness', 2))
-                self.vad = webrtcvad.Vad(aggressiveness)
-                self.last_speech_time = time.time()  # Assume wake word was speech
-                self.speech_started = False
-                self.log(f"VAD enabled (aggressiveness={aggressiveness})")
+            # Initialize Silero VAD for end-of-speech detection
+            if SILERO_VAD_AVAILABLE:
+                try:
+                    self.silero_vad = SileroVoiceActivityDetector()
+                    self.vad_trigger_count = 0
+                    self.log("Silero VAD initialized")
+                except Exception as e:
+                    self.log(f"Failed to init Silero VAD: {e}, using timer", "WARN")
+                    self.silero_vad = None
             else:
-                self.vad = None
-                self.log("VAD disabled, using timer-based recording")
+                self.silero_vad = None
+                self.log("Silero VAD not available, using timer-based recording")
             
-            # Start recording command (uses PyAudio buffer)
-            self.audio_buffer = []
+            self.last_speech_time = time.time()
+            self.speech_started = False
+            
+            # Pre-populate audio buffer with ring buffer contents (audio BEFORE wake word)
+            self.audio_buffer = list(self.ring_buffer)
+            self.ring_buffer.clear()
+            if len(self.audio_buffer) > 0:
+                self.log(f"Pre-populated buffer with {len(self.audio_buffer)} frames of pre-speech audio")
+            
             self.recording_start_time = time.time()
             self.is_recording = True
             self.recording_source = 'wake_word'  # Track source for priority handling
@@ -1033,11 +1097,38 @@ class AIChatBot:
             self.current_audio_file = os.path.join(RECORDINGS_DIR, f"recording_{timestamp}.wav")
             
             self.set_state(State.LISTENING)
-            if self.vad:
-                silence_threshold = float(self.config['wake_word'].get('silence_threshold', 0.8))
-                self.log(f"Recording... (stop after {silence_threshold}s silence, max {self.recording_duration}s)")
-            else:
-                self.log(f"Recording command for {self.recording_duration}s...")
+            silence_threshold = float(self.config['wake_word'].get('silence_threshold', 0.8))
+            self.log(f"Recording... (stop after {silence_threshold}s silence, max {self.recording_duration}s)")
+    
+    def _cleanup_recording(self, reason=""):
+        """Clean up recording state without processing audio"""
+        with self.recording_lock:
+            self.is_recording = False
+            self.recording_source = None
+            self.audio_buffer = []
+            self.silero_vad = None
+            self.wake_detected_time = None
+            self.vad_trigger_count = 0
+        
+        self.log(f"Recording cleanup: {reason}")
+        self.update_qa_display(clear=True)
+        
+        # Add cooldown to prevent immediate re-triggering (feedback sound can trigger wake word)
+        self.tts_cooldown_until = time.time() + 2.0
+        self.log("Wake word cooldown for 2.0s after cleanup")
+        
+        if self.wake_word_enabled:
+            self.set_state(State.WAKE_LISTENING)
+        else:
+            self.set_state(State.IDLE)
+    
+    def _stop_recording_safe(self):
+        """Safely stop recording with error handling"""
+        try:
+            self.stop_recording()
+        except Exception as e:
+            self.log(f"Error in stop_recording: {e}", "ERROR")
+            self._cleanup_recording(f"Error: {e}")
     
     def wake_word_loop(self):
         """Wake word detection thread - runs continuously"""
@@ -1095,75 +1186,79 @@ class AIChatBot:
                     audio_data = stream.read(1280 * DECIMATION_FACTOR, exception_on_overflow=False)
                     audio_array_48k = np.frombuffer(audio_data, dtype=np.int16)
                     
-                    # If we're recording (wake word or K1 triggered), buffer the audio
-                    if self.is_recording:
+                    # Decimate to 16kHz for processing
+                    audio_16k = audio_array_48k[::DECIMATION_FACTOR]
+                    
+                    # Apply audio enhancement (noise suppression) if available
+                    if self.audio_processor:
+                        try:
+                            enhanced = self.audio_processor.process(audio_16k.tobytes())
+                            audio_16k = np.frombuffer(enhanced, dtype=np.int16)
+                        except Exception:
+                            pass  # Use original if processing fails
+                    
+                    # If NOT recording, add to ring buffer (for pre-speech audio capture)
+                    if not self.is_recording:
+                        self.ring_buffer.append(audio_data)
+                    else:
+                        # Recording active - buffer audio and check for end of speech
                         self.audio_buffer.append(audio_data)
                         elapsed = time.time() - self.recording_start_time
                         
-                        # VAD-based end-of-speech detection
-                        if self.vad:
-                            # Decimate to 16kHz for VAD (webrtcvad needs 8/16/32/48 kHz)
-                            audio_16k = audio_array_48k[::DECIMATION_FACTOR]
-                            audio_16k_bytes = audio_16k.tobytes()
-                            
-                            # webrtcvad needs 10/20/30ms frames at 16kHz
-                            # 16kHz * 0.020s = 320 samples = 640 bytes per 20ms frame
-                            FRAME_SIZE = 320  # samples per 20ms frame
-                            is_speech = False
-                            
-                            # Check if any frame in this chunk contains speech
-                            for i in range(0, len(audio_16k) - FRAME_SIZE, FRAME_SIZE):
-                                frame = audio_16k_bytes[i*2:(i+FRAME_SIZE)*2]  # 2 bytes per sample
-                                if len(frame) == FRAME_SIZE * 2:
-                                    try:
-                                        if self.vad.is_speech(frame, 16000):
+                        # Check wake-to-command timeout (no speech detected after wake word)
+                        if not self.speech_started and self.wake_detected_time:
+                            time_since_wake = time.time() - self.wake_detected_time
+                            if time_since_wake >= self.wake_command_timeout:
+                                self.log(f"No speech {self.wake_command_timeout}s after wake word - timeout")
+                                self._cleanup_recording("No command detected")
+                                continue
+                        
+                        # Silero VAD-based end-of-speech detection
+                        if self.silero_vad:
+                            try:
+                                # Silero VAD expects bytes: 512 samples of 16kHz 16-bit mono PCM
+                                # Process in 512-sample chunks
+                                SILERO_CHUNK = 512  # samples
+                                audio_16k_bytes = audio_16k.tobytes()
+                                vad_threshold = 0.5  # probability threshold
+                                
+                                is_speech = False
+                                # Process each 512-sample chunk
+                                for i in range(0, len(audio_16k) - SILERO_CHUNK, SILERO_CHUNK):
+                                    chunk = audio_16k_bytes[i*2:(i+SILERO_CHUNK)*2]  # 2 bytes per sample
+                                    if len(chunk) == SILERO_CHUNK * 2:
+                                        prob = self.silero_vad(chunk)
+                                        if prob > vad_threshold:
                                             is_speech = True
                                             break
-                                    except:
-                                        pass
-                            
-                            if is_speech:
-                                self.last_speech_time = time.time()
-                                if not self.speech_started:
-                                    self.speech_started = True
-                                    self.log("Speech detected, listening...")
-                            
-                            # Check silence threshold (only after speech started)
-                            silence_threshold = float(self.config['wake_word'].get('silence_threshold', 0.8))
-                            silence_duration = time.time() - self.last_speech_time
-                            
-                            if self.speech_started and silence_duration >= silence_threshold:
-                                self.log(f"End of speech detected ({silence_duration:.1f}s silence)")
-                                # DEFENSIVE FIX: Wrap in try/except to ensure cleanup even if stop_recording fails
-                                try:
-                                    self.stop_recording()
-                                except Exception as e:
-                                    self.log(f"Error in stop_recording (VAD): {e}", "ERROR")
-                                    self.is_recording = False
-                                    self.update_qa_display(clear=True)
-                                    self.set_state(State.WAKE_LISTENING if self.wake_word_enabled else State.IDLE)
-                            elif elapsed >= self.recording_duration:
-                                self.log(f"Max recording time reached ({elapsed:.1f}s)")
-                                # DEFENSIVE FIX: Wrap in try/except to ensure cleanup even if stop_recording fails
-                                try:
-                                    self.stop_recording()
-                                except Exception as e:
-                                    self.log(f"Error in stop_recording (timeout): {e}", "ERROR")
-                                    self.is_recording = False
-                                    self.update_qa_display(clear=True)
-                                    self.set_state(State.WAKE_LISTENING if self.wake_word_enabled else State.IDLE)
+                                
+                                if is_speech:
+                                    self.vad_trigger_count += 1
+                                    if self.vad_trigger_count >= self.vad_trigger_level:
+                                        if not self.speech_started:
+                                            self.speech_started = True
+                                            self.log("Speech detected, listening...")
+                                        self.last_speech_time = time.time()
+                                else:
+                                    self.vad_trigger_count = max(0, self.vad_trigger_count - 1)
+                                
+                                # Check silence threshold (only after speech started)
+                                silence_threshold = float(self.config['wake_word'].get('silence_threshold', 0.8))
+                                silence_duration = time.time() - self.last_speech_time
+                                
+                                if self.speech_started and silence_duration >= silence_threshold:
+                                    self.log(f"End of speech detected ({silence_duration:.1f}s silence)")
+                                    self._stop_recording_safe()
+                                elif elapsed >= self.recording_duration:
+                                    self.log(f"Max recording time reached ({elapsed:.1f}s)")
+                                    self._stop_recording_safe()
+                            except Exception as e:
+                                self.log(f"VAD error: {e}", "ERROR")
                         else:
                             # Fallback: timer-based recording (no VAD)
                             if elapsed >= self.recording_duration:
                                 self.log(f"Auto-stopping recording after {elapsed:.1f}s")
-                                # DEFENSIVE FIX: Wrap in try/except to ensure cleanup even if stop_recording fails
-                                try:
-                                    self.stop_recording()
-                                except Exception as e:
-                                    self.log(f"Error in stop_recording (fallback): {e}", "ERROR")
-                                    self.is_recording = False
-                                    self.update_qa_display(clear=True)
-                                    self.set_state(State.WAKE_LISTENING if self.wake_word_enabled else State.IDLE)
+                                self._stop_recording_safe()
                     
                     # Only do wake word detection if in WAKE_LISTENING state and not in cooldown
                     if self.state == State.WAKE_LISTENING and not self.wake_word_paused:

@@ -526,15 +526,22 @@ ApplicationWindow {
         running: true
         repeat: true
         
-        property string qaContent: "╔════════════════════════════╗\n║  SHATROX AI Robot Ready  ║\n╚════════════════════════════╝\n\nSay 'Hey Jarvis' to activate\nPress K1 to talk\nPress K3 for camera"
+        property string defaultContent: "╔════════════════════════════╗\n║  SHATRIX AI Robot Ready  ║\n╚════════════════════════════╝\n\nSay 'Hey Jarvis' to activate\nPress K1 to talk\nPress K3 for camera"
+        property string qaContent: defaultContent
         property string previousContent: ""
         property string qaFile: "/tmp/ai-qa-display.txt"
         property bool hasNewContent: false
         
         onTriggered: {
             var content = fileReader.readFile(qaFile)
-            if (content !== "" && content !== qaContent) {
-                // Detect new content
+            // Handle empty file - reset to default display
+            if (content === "" || content.trim() === "") {
+                if (qaContent !== defaultContent) {
+                    qaContent = defaultContent
+                    hasNewContent = false
+                }
+            } else if (content !== qaContent) {
+                // Detect new non-empty content
                 hasNewContent = (content.length > previousContent.length)
                 previousContent = qaContent
                 qaContent = content

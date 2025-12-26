@@ -37,14 +37,14 @@ echo ""
 
 # Step 2: Install Python dependencies
 log "Installing OpenWakeWord and VAD Python packages..."
-pip3 install --break-system-packages openwakeword>=0.6.0 pyaudio numpy webrtcvad>=2.0.10 2>&1 | tee -a /var/log/rpi5-ai-robot-setup.log
+pip3 install --break-system-packages openwakeword>=0.6.0 pyaudio numpy pysilero-vad==1.0.0 webrtc-noise-gain==1.2.3 2>&1 | tee -a /var/log/rpi5-ai-robot-setup.log
 
 if [ $? -ne 0 ]; then
     error "Failed to install OpenWakeWord Python packages"
     exit 1
 fi
 
-log "✓ OpenWakeWord and webrtcvad packages installed"
+log "✓ OpenWakeWord, Silero VAD, and webrtc-noise-gain packages installed"
 echo ""
 
 # Step 3: Create model directory
@@ -85,7 +85,8 @@ mkdir -p /usr/share/sounds
 
 # Generate a simple ding sound using sox (or provide a pre-recorded one)
 if command -v sox &> /dev/null; then
-    sox -n -r 22050 -c 1 /usr/share/sounds/wake.wav synth 0.1 sine 800 fade 0 0.1 0.05 2>&1 | tee -a /var/log/rpi5-ai-robot-setup.log
+    # Two-tone chime (more noticeable)
+    sox -n -r 22050 -c 1 /usr/share/sounds/wake.wav synth 0.15 sine 523 synth 0.15 sine 659 fade 0 0.15 0.05 2>&1 | tee -a /var/log/rpi5-ai-robot-setup.log
     if [ $? -eq 0 ]; then
         log "✓ Generated wake word feedback sound"
     else

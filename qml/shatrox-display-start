@@ -13,7 +13,7 @@ chown root:root "$LOG_FILE"
 
 # Clear old content on startup (optional)
 echo "╔═══════════════════════════════════════════════════════════╗" > "$LOG_FILE"
-echo "║           SHATROX AI Display Ready                       ║" >> "$LOG_FILE"
+echo "║           SHATROX AI Display Ready                        ║" >> "$LOG_FILE"
 echo "╚═══════════════════════════════════════════════════════════╝" >> "$LOG_FILE"
 echo "" >> "$LOG_FILE"
 
