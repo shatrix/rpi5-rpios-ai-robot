@@ -40,8 +40,12 @@ except ImportError:
 # ============================================================================
 
 # Ultrasonic Sensor GPIO Pins (HC-SR04-P on 3.3V)
-SENSOR_TRIGGER_PIN = 22  # GPIO 22
-SENSOR_ECHO_PIN = 23     # GPIO 23
+# Left sensor (mounted on left-front of robot)
+SENSOR_LEFT_TRIGGER_PIN = 22   # GPIO 22
+SENSOR_LEFT_ECHO_PIN = 23      # GPIO 23
+# Right sensor (mounted on right-front of robot)
+SENSOR_RIGHT_TRIGGER_PIN = 16  # GPIO 16 (Pin 36)
+SENSOR_RIGHT_ECHO_PIN = 12     # GPIO 12 (Pin 32)
 
 # Motor channels on PCA9685
 # Waveshare Motor Driver HAT wiring:
@@ -67,9 +71,10 @@ AVOID_TURN_DURATION = 2.0  # How long to turn when avoiding (Mecanum wheels turn
 AVOID_TURN_SPEED = 100     # Speed when turning to avoid (full power for tank steering)
 
 # Speed limits (0-100%)
-DEFAULT_SPEED = 50
+DEFAULT_SPEED = 70
 MAX_SPEED = 100
 MIN_SPEED = 0
+MIN_MOTOR_THRESHOLD = 50  # Minimum PWM to overcome motor stall voltage
 
 # Unix socket for external control
 MOTOR_SOCKET = "/tmp/shatrox-motor-control.sock"
@@ -92,6 +97,8 @@ class MotorController:
         
         self.running = False
         self.obstacle_detected = False
+        self.obstacle_left = False   # Left sensor detected obstacle
+        self.obstacle_right = False  # Right sensor detected obstacle
         self.current_speed = DEFAULT_SPEED
         self.sensor_thread = None
         self.socket_thread = None
@@ -101,6 +108,10 @@ class MotorController:
         self.is_moving_forward = False  # Track if actively moving forward
         self.avoidance_in_progress = False  # Prevent re-triggering during avoidance
         self.explore_mode = False  # When True, auto-resume forward after obstacle avoidance
+        
+        # Last sensor readings (for status reporting)
+        self.last_distance_left = MAX_SENSOR_DISTANCE
+        self.last_distance_right = MAX_SENSOR_DISTANCE
         
         # Initialize logging
         self.log("Motor Controller initializing...")
@@ -140,28 +151,34 @@ class MotorController:
             # Use gpiod 2.x API
             from gpiod.line import Bias, Edge
             
-            # Configure trigger pin (output)
+            # Configure trigger pins (output)
             trigger_settings = gpiod.LineSettings(
                 direction=Direction.OUTPUT,
                 output_value=Value.INACTIVE
             )
             
-            # Configure echo pin (input) - no bias, let sensor drive
+            # Configure echo pins (input) - no bias, let sensor drive
             echo_settings = gpiod.LineSettings(
                 direction=Direction.INPUT
             )
             
-            # Request lines
+            # Request lines for BOTH sensors
             self.gpio_request = gpiod.request_lines(
                 "/dev/gpiochip4",
                 consumer="motor-sensor",
                 config={
-                    SENSOR_TRIGGER_PIN: trigger_settings,
-                    SENSOR_ECHO_PIN: echo_settings
+                    # Left sensor
+                    SENSOR_LEFT_TRIGGER_PIN: trigger_settings,
+                    SENSOR_LEFT_ECHO_PIN: echo_settings,
+                    # Right sensor
+                    SENSOR_RIGHT_TRIGGER_PIN: trigger_settings,
+                    SENSOR_RIGHT_ECHO_PIN: echo_settings
                 }
             )
             
-            self.log(f"Ultrasonic sensor initialized (GPIO {SENSOR_TRIGGER_PIN}/{SENSOR_ECHO_PIN})")
+            self.log(f"Ultrasonic sensors initialized:")
+            self.log(f"  Left:  GPIO {SENSOR_LEFT_TRIGGER_PIN}/{SENSOR_LEFT_ECHO_PIN}")
+            self.log(f"  Right: GPIO {SENSOR_RIGHT_TRIGGER_PIN}/{SENSOR_RIGHT_ECHO_PIN}")
             
         except Exception as e:
             self.log(f"ERROR: Failed to initialize sensor GPIO: {e}")
@@ -185,23 +202,23 @@ class MotorController:
             pass  # Ignore logging errors
     
     
-    def read_distance(self) -> float:
+    def _read_sensor(self, trigger_pin: int, echo_pin: int) -> float:
         """
-        Read distance from HC-SR04-P ultrasonic sensor
+        Read distance from a single HC-SR04-P ultrasonic sensor
         Returns distance in centimeters, or MAX_SENSOR_DISTANCE if out of range
         """
         try:
             # Send 10us trigger pulse with proper settle time
-            self.gpio_request.set_value(SENSOR_TRIGGER_PIN, Value.INACTIVE)
+            self.gpio_request.set_value(trigger_pin, Value.INACTIVE)
             time.sleep(0.002)  # 2ms settle time (important!)
-            self.gpio_request.set_value(SENSOR_TRIGGER_PIN, Value.ACTIVE)
+            self.gpio_request.set_value(trigger_pin, Value.ACTIVE)
             time.sleep(0.00001)   # 10us trigger
-            self.gpio_request.set_value(SENSOR_TRIGGER_PIN, Value.INACTIVE)
+            self.gpio_request.set_value(trigger_pin, Value.INACTIVE)
             
             # Wait for echo to go high (timeout 100ms)
             timeout = time.time() + 0.1
             pulse_start = time.time()
-            while self.gpio_request.get_value(SENSOR_ECHO_PIN) == Value.INACTIVE:
+            while self.gpio_request.get_value(echo_pin) == Value.INACTIVE:
                 pulse_start = time.time()
                 if pulse_start > timeout:
                     return MAX_SENSOR_DISTANCE
@@ -211,7 +228,7 @@ class MotorController:
             
             # Wait for echo to go low (timeout 30ms for max range)
             timeout = time.time() + 0.03
-            while self.gpio_request.get_value(SENSOR_ECHO_PIN) == Value.ACTIVE:
+            while self.gpio_request.get_value(echo_pin) == Value.ACTIVE:
                 if time.time() > timeout:
                     return MAX_SENSOR_DISTANCE
             
@@ -234,18 +251,58 @@ class MotorController:
             return MAX_SENSOR_DISTANCE
     
     
+    def read_distance_left(self) -> float:
+        """Read distance from LEFT ultrasonic sensor"""
+        return self._read_sensor(SENSOR_LEFT_TRIGGER_PIN, SENSOR_LEFT_ECHO_PIN)
+    
+    
+    def read_distance_right(self) -> float:
+        """Read distance from RIGHT ultrasonic sensor"""
+        return self._read_sensor(SENSOR_RIGHT_TRIGGER_PIN, SENSOR_RIGHT_ECHO_PIN)
+    
+    
+    def read_distance(self) -> float:
+        """
+        Read distance from BOTH sensors, return minimum (closest obstacle)
+        For backward compatibility with existing code
+        """
+        left = self.read_distance_left()
+        right = self.read_distance_right()
+        self.last_distance_left = left
+        self.last_distance_right = right
+        return min(left, right)
+    
+    
     def obstacle_monitoring_loop(self):
-        """Background thread to continuously monitor for obstacles"""
-        self.log("Obstacle monitoring started")
-        self.last_turn_was_left = False  # Alternate turn direction to avoid loops
+        """Background thread to continuously monitor for obstacles using BOTH sensors"""
+        self.log("Obstacle monitoring started (dual sensors)")
+        self.last_turn_was_left = False  # Alternate turn direction when both blocked
         
         while self.running:
             try:
-                distance = self.read_distance()
+                # Read both sensors
+                left_distance = self.read_distance_left()
+                right_distance = self.read_distance_right()
+                self.last_distance_left = left_distance
+                self.last_distance_right = right_distance
                 
-                if distance < OBSTACLE_DISTANCE_CM:
+                # Check each sensor for obstacles
+                left_obstacle = left_distance < OBSTACLE_DISTANCE_CM
+                right_obstacle = right_distance < OBSTACLE_DISTANCE_CM
+                any_obstacle = left_obstacle or right_obstacle
+                
+                # Update obstacle flags
+                self.obstacle_left = left_obstacle
+                self.obstacle_right = right_obstacle
+                
+                if any_obstacle:
                     if not self.obstacle_detected:
-                        self.log(f"OBSTACLE DETECTED at {distance:.1f}cm", "WARNING")
+                        if left_obstacle and right_obstacle:
+                            self.log(f"OBSTACLE DETECTED BOTH sides! L:{left_distance:.1f}cm R:{right_distance:.1f}cm", "WARNING")
+                        elif left_obstacle:
+                            self.log(f"OBSTACLE LEFT at {left_distance:.1f}cm", "WARNING")
+                        else:
+                            self.log(f"OBSTACLE RIGHT at {right_distance:.1f}cm", "WARNING")
                         self.obstacle_detected = True
                         
                         # Only perform avoidance if we were moving forward
@@ -256,12 +313,13 @@ class MotorController:
                             self.stop()
                 else:
                     if self.obstacle_detected:
-                        self.log(f"Obstacle cleared ({distance:.1f}cm)")
+                        self.log(f"Obstacles cleared (L:{left_distance:.1f}cm R:{right_distance:.1f}cm)")
                         self.obstacle_detected = False
                 
                 time.sleep(SENSOR_READ_INTERVAL)
                 
             except Exception as e:
+
                 self.log(f"Obstacle monitoring error: {e}", "ERROR")
                 time.sleep(1)
         
@@ -292,18 +350,30 @@ class MotorController:
                 self._raw_move_backward(BACKUP_SPEED, BACKUP_DURATION)
             
             elif self.obstacle_behavior == OBSTACLE_BEHAVIOR_AVOID:
-                # Full avoidance: back up + turn
+                # Full avoidance: back up + turn AWAY from obstacle
                 self.log(f"Avoidance: backing up for {BACKUP_DURATION}s")
                 time.sleep(0.2)  # Brief pause before reversing
                 self._raw_move_backward(BACKUP_SPEED, BACKUP_DURATION)
                 
-                # Alternate turn direction to avoid getting stuck
-                if self.last_turn_was_left:
-                    self.log(f"Avoidance: turning RIGHT for {AVOID_TURN_DURATION}s")
+                # Smart directional avoidance based on which sensor(s) detected obstacle
+                if self.obstacle_left and self.obstacle_right:
+                    # Both sides blocked: alternate turn direction to avoid loops
+                    if self.last_turn_was_left:
+                        self.log(f"Avoidance: BOTH blocked, turning RIGHT for {AVOID_TURN_DURATION}s")
+                        self._raw_turn_right(AVOID_TURN_SPEED, AVOID_TURN_DURATION)
+                        self.last_turn_was_left = False
+                    else:
+                        self.log(f"Avoidance: BOTH blocked, turning LEFT for {AVOID_TURN_DURATION}s")
+                        self._raw_turn_left(AVOID_TURN_SPEED, AVOID_TURN_DURATION)
+                        self.last_turn_was_left = True
+                elif self.obstacle_left:
+                    # Left obstacle: turn RIGHT (away from obstacle)
+                    self.log(f"Avoidance: LEFT obstacle, turning RIGHT for {AVOID_TURN_DURATION}s")
                     self._raw_turn_right(AVOID_TURN_SPEED, AVOID_TURN_DURATION)
                     self.last_turn_was_left = False
                 else:
-                    self.log(f"Avoidance: turning LEFT for {AVOID_TURN_DURATION}s")
+                    # Right obstacle: turn LEFT (away from obstacle)
+                    self.log(f"Avoidance: RIGHT obstacle, turning LEFT for {AVOID_TURN_DURATION}s")
                     self._raw_turn_left(AVOID_TURN_SPEED, AVOID_TURN_DURATION)
                     self.last_turn_was_left = True
                 
@@ -346,24 +416,24 @@ class MotorController:
     
     def _raw_turn_left(self, speed: int, duration: float):
         """Internal: turn left without clearing explore_mode (for avoidance)
-        MECANUM TANK STEERING: Left backward, Right forward - rotates in place
+        TANK STEERING: Left forward, Right backward - rotates left
         """
         self.set_motor_speed(0, speed)
         self.set_motor_speed(1, speed)
-        self.set_motor_direction(0, 'backward')  # Left backward
-        self.set_motor_direction(1, 'forward')   # Right forward
+        self.set_motor_direction(0, 'forward')   # Left forward
+        self.set_motor_direction(1, 'backward')  # Right backward
         time.sleep(duration)
         self._stop_motors()
     
     
     def _raw_turn_right(self, speed: int, duration: float):
         """Internal: turn right without clearing explore_mode (for avoidance)
-        MECANUM TANK STEERING: Left forward, Right backward - rotates in place
+        TANK STEERING: Left backward, Right forward - rotates right
         """
         self.set_motor_speed(0, speed)
         self.set_motor_speed(1, speed)
-        self.set_motor_direction(0, 'forward')   # Left forward
-        self.set_motor_direction(1, 'backward')  # Right backward
+        self.set_motor_direction(0, 'backward')  # Left backward
+        self.set_motor_direction(1, 'forward')   # Right forward
         time.sleep(duration)
         self._stop_motors()
     
@@ -399,12 +469,17 @@ class MotorController:
         """
         Set motor speed using PWM duty cycle (0-100%)
         motor: 0=left(A), 1=right(B)
-        speed: 0-100
+        speed: 0-100, but minimum threshold applied to overcome stall voltage
         """
         if speed > 100:
             speed = 100
         if speed < 0:
             speed = 0
+        
+        # Apply minimum threshold to overcome motor stall voltage
+        # (motors need ~40% PWM to start spinning reliably)
+        if speed > 0 and speed < MIN_MOTOR_THRESHOLD:
+            speed = MIN_MOTOR_THRESHOLD
         
         if motor == 0:  # Motor A
             self.pca.setDutycycle(self.PWMA, speed)
@@ -491,11 +566,11 @@ class MotorController:
         # Mecanum wheels: 5s per 90°
         duration = (angle / 90.0) * 5.0
         
-        self.log(f"MECANUM TURN LEFT ~{angle}° at {speed}% duration:{duration:.1f}s")
+        self.log(f"TURN LEFT ~{angle}° at {speed}% duration:{duration:.1f}s")
         self.set_motor_speed(0, speed)
         self.set_motor_speed(1, speed)
-        self.set_motor_direction(0, 'backward')  # Left backward
-        self.set_motor_direction(1, 'forward')   # Right forward
+        self.set_motor_direction(0, 'forward')   # Left forward
+        self.set_motor_direction(1, 'backward')  # Right backward
         
         time.sleep(duration)
         self.stop()
@@ -515,11 +590,11 @@ class MotorController:
         # Mecanum wheels: 5s per 90°
         duration = (angle / 90.0) * 5.0
         
-        self.log(f"MECANUM TURN RIGHT ~{angle}° at {speed}% duration:{duration:.1f}s")
+        self.log(f"TURN RIGHT ~{angle}° at {speed}% duration:{duration:.1f}s")
         self.set_motor_speed(0, speed)
         self.set_motor_speed(1, speed)
-        self.set_motor_direction(0, 'forward')   # Left forward
-        self.set_motor_direction(1, 'backward')  # Right backward
+        self.set_motor_direction(0, 'backward')  # Left backward
+        self.set_motor_direction(1, 'forward')   # Right forward
         
         time.sleep(duration)
         self.stop()
@@ -588,8 +663,27 @@ class MotorController:
                 return {"status": "ok", "action": "stop"}
             
             elif action == "get_distance":
-                distance = self.read_distance()
-                return {"status": "ok", "distance_cm": distance}
+                # Return both sensor distances (backward compat: min is in distance_cm)
+                left = self.read_distance_left()
+                right = self.read_distance_right()
+                return {
+                    "status": "ok",
+                    "distance_cm": min(left, right),
+                    "distance_left_cm": left,
+                    "distance_right_cm": right
+                }
+            
+            elif action == "get_sensors":
+                # Dedicated command for dual sensor readings
+                left = self.read_distance_left()
+                right = self.read_distance_right()
+                return {
+                    "status": "ok",
+                    "left_cm": left,
+                    "right_cm": right,
+                    "obstacle_left": left < OBSTACLE_DISTANCE_CM,
+                    "obstacle_right": right < OBSTACLE_DISTANCE_CM
+                }
             
             elif action == "test_motors":
                 self.test_motors()
@@ -628,12 +722,17 @@ class MotorController:
                 return {"status": "ok", "action": "explore_stop", "message": "Exploration stopped"}
             
             elif action == "get_status":
-                # Get full motor controller status
-                distance = self.read_distance()
+                # Get full motor controller status with dual sensor readings
+                left = self.read_distance_left()
+                right = self.read_distance_right()
                 return {
                     "status": "ok",
-                    "distance_cm": distance,
+                    "distance_cm": min(left, right),
+                    "distance_left_cm": left,
+                    "distance_right_cm": right,
                     "obstacle_detected": self.obstacle_detected,
+                    "obstacle_left": self.obstacle_left,
+                    "obstacle_right": self.obstacle_right,
                     "obstacle_behavior": self.obstacle_behavior,
                     "is_moving_forward": self.is_moving_forward,
                     "avoidance_in_progress": self.avoidance_in_progress,

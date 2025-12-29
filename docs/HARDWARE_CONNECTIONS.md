@@ -14,7 +14,7 @@ Complete hardware wiring reference for the RPi5 AI Robot project.
 | **Speakers** | USB | USB Port (via USB Audio) |
 | **Buttons (5x)** | GPIO | GPIO 5, 6, 13, 19, 26 |
 | **Motor HAT** | I2C | GPIO 2 (SDA), GPIO 3 (SCL) |
-| **Ultrasonic Sensor** | GPIO | GPIO 22 (Trigger), GPIO 23 (Echo) |
+| **Ultrasonic Sensors (2x)** | GPIO | Left: GPIO 22/23, Right: GPIO 16/12 |
 | **Battery** | Power | Motor HAT Terminal |
 | **Active Cooler** | PWM | GPIO Header (5V/GND/PWM) |
 
@@ -46,6 +46,16 @@ Complete hardware wiring reference for the RPi5 AI Robot project.
 > dtoverlay=piscreen,speed=18000000,drm,rotate=0
 > dtparam=spi=on
 > ```
+
+> [!CAUTION]
+> **Piscreen GPIO Conflicts - AVOID THESE PINS:**
+> The piscreen overlay and ADS7846 touch controller cause conflicts with certain GPIO pins. Using these pins for other purposes may cause phantom touch events or display issues:
+> - **GPIO 4 (Pin 7)** - Causes phantom touch events when used
+> - **GPIO 17 (Pin 11)** - Reserved for Touch IRQ
+> - **GPIO 7 (Pin 26)** - Reserved for Touch CS (SPI0_CE1)
+> - **GPIO 8-11, 24, 25** - Reserved for display SPI and control
+> 
+> **Safe GPIO pins for sensors/peripherals:** GPIO 5, 6, 12, 13, 16, 19, 20, 21, 22, 23, 26, 27
 
 ---
 
@@ -165,22 +175,34 @@ GPIO Pin ──┬── Button ── GND
 
 ---
 
-### 8. Ultrasonic Sensor - HC-SR04-P (3.3V Compatible)
+### 8. Ultrasonic Sensors - HC-SR04-P (3.3V Compatible) x2
 
 **Interface:** GPIO Digital I/O
 
+The robot uses **two ultrasonic sensors** for improved obstacle avoidance: one mounted on the left-front and one on the right-front.
+
+#### Left Sensor (mounted left-front)
 | Sensor Pin | RPi5 Pin | GPIO |
 |------------|----------|------|
-| VCC | Pin 1 | 3.3V |
-| GND | Pin 14 | Ground |
+| VCC | Pin 1 or 17 | 3.3V (shared) |
+| GND | Pin 14 | Ground (shared) |
 | Trigger | Pin 15 | GPIO 22 |
 | Echo | Pin 16 | GPIO 23 |
+
+#### Right Sensor (mounted right-front)
+| Sensor Pin | RPi5 Pin | GPIO |
+|------------|----------|------|
+| VCC | Pin 1 or 17 | 3.3V (shared) |
+| GND | Pin 14 | Ground (shared) |
+| Trigger | Pin 36 | GPIO 16 |
+| Echo | Pin 32 | GPIO 12 |
 
 > [!CAUTION]
 > Use the **HC-SR04-P** (3.3V version), NOT the standard HC-SR04 (5V). The 5V version can damage Raspberry Pi GPIO pins!
 
 **Range:** 2cm - 400cm  
-**Safety Distance:** 20cm (configurable)
+**Safety Distance:** 20cm (configurable)  
+**Smart Avoidance:** Left obstacle → turn right, Right obstacle → turn left
 
 ---
 
@@ -296,28 +318,31 @@ GPIO Pin ──┬── Button ── GND
 
 | Physical Pin | GPIO | Function | Used By |
 |--------------|------|----------|---------|
-| 1 | 3.3V | Power | HC-SR04-P VCC |
+| 1 | 3.3V | Power | HC-SR04-P VCC (shared) |
 | 2 | 5V | Power | Display VCC |
 | 3 | GPIO 2 | I2C1 SDA | Motor HAT |
 | 5 | GPIO 3 | I2C1 SCL | Motor HAT |
 | 6 | GND | Ground | Display |
+| 7 | GPIO 4 | ⚠️ AVOID | Piscreen conflict |
 | 9 | GND | Ground | Motor HAT |
-| 11 | GPIO 17 | Input | Touch IRQ |
+| 11 | GPIO 17 | Input | Touch IRQ (piscreen) |
 | 12 | GPIO 18 | PWM | Display LED |
-| 14 | GND | Ground | HC-SR04-P |
-| 15 | GPIO 22 | Output | HC-SR04-P Trigger |
-| 16 | GPIO 23 | Input | HC-SR04-P Echo |
+| 14 | GND | Ground | HC-SR04-P (shared) |
+| 15 | GPIO 22 | Output | HC-SR04-P Left Trigger |
+| 16 | GPIO 23 | Input | HC-SR04-P Left Echo |
 | 18 | GPIO 24 | Output | Display DC |
 | 19 | GPIO 10 | SPI0 MOSI | Display |
 | 21 | GPIO 9 | SPI0 MISO | Display |
 | 22 | GPIO 25 | Output | Display RST |
 | 23 | GPIO 11 | SPI0 SCLK | Display |
 | 24 | GPIO 8 | SPI0 CE0 | Display CS |
-| 26 | GPIO 7 | SPI0 CE1 | Touch CS |
+| 26 | GPIO 7 | SPI0 CE1 | Touch CS (piscreen) |
 | 29 | GPIO 5 | Input | Button K1 |
 | 31 | GPIO 6 | Input | Button K2 |
+| 32 | GPIO 12 | Input | HC-SR04-P Right Echo |
 | 33 | GPIO 13 | Input | Button K3 |
 | 35 | GPIO 19 | Input | Button K4 |
+| 36 | GPIO 16 | Output | HC-SR04-P Right Trigger |
 | 37 | GPIO 26 | Input | Button K8 |
 
 ---
@@ -334,7 +359,7 @@ GPIO Pin ──┬── Button ── GND
 | Speakers | Powered speakers (USB or 3.5mm) | 1 set |
 | Motor Driver HAT | Waveshare (PCA9685 + TB6612FNG) | 1 |
 | DC Motors | Geared motors | 4 |
-| Ultrasonic Sensor | HC-SR04-P (3.3V version) | 1 |
+| Ultrasonic Sensor | HC-SR04-P (3.3V version) | 2 |
 | Push Buttons | Momentary SPST | 5 |
 | Battery Pack | 7.2V NiMH or 2S LiPo | 1 |
 | Active Cooler | Official RPi5 Active Cooler | 1 |

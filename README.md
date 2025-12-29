@@ -11,7 +11,7 @@ Automated setup to replicate a Yocto-based AI robot system on Raspberry Pi OS (D
 - **Buttons:** 8x GPIO buttons (K1-K8) on GPIO pins: 5, 6, 13, 19, 26
 - **Motor Control:** Waveshare Motor Driver HAT (I2C, PCA9685 PWM, TB6612FNG H-bridge)
 - **Motors:** 4x DC motors (paired: 2 left, 2 right) powered by 7.2V battery
-- **Sensor:** HC-SR04-P ultrasonic sensor (3.3V) on GPIO 22 (trigger) / 23 (echo)
+- **Sensors:** 2x HC-SR04-P ultrasonic sensors (3.3V) - Left: GPIO 22/23, Right: GPIO 16/12
 - **Storage:** 16GB+ SD card or NVMe SSD (32GB+ recommended for models)
 - **Cooling:** Official RPi 5 Active Cooler (recommended)
 
@@ -37,7 +37,8 @@ Automated setup to replicate a Yocto-based AI robot system on Raspberry Pi OS (D
 - **Motor Control:** Autonomous movement with obstacle detection
   - **4 DC Motors:** Tank-style differential drive (left/right channels)
   - **Ultrasonic Sensor:** HC-SR04-P for obstacle detection (20cm safety distance)
-  - **Auto-Stop:** Automatically stops when obstacles detected
+- **Dual Sensors:** Left + Right HC-SR04-P for improved detection
+  - **Smart Avoidance:** Turns away from obstacle side (left obstacle → turn right)
   - **Explore Mode:** Continuous movement with automatic obstacle avoidance
   - **Voice Control:** Natural language motor commands via AI chatbot
   - **Movement Commands:** Forward, backward, turn left, turn right via socket API

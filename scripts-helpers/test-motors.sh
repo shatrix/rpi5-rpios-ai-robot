@@ -55,7 +55,7 @@ while true; do
     echo "──────────────────────────────────────────────────────────"
     echo "Motor Control Test Menu:"
     echo "──────────────────────────────────────────────────────────"
-    echo "  1) Test distance sensor"
+    echo "  1) Test BOTH distance sensors (left + right)"
     echo "  2) Move forward (2 seconds)"
     echo "  3) Move backward (2 seconds)"
     echo "  4) Turn left (90°)"
@@ -66,7 +66,7 @@ while true; do
     echo "  9) View motor service logs"
     echo "──────────────────────────────────────────────────────────"
     echo "  Obstacle Avoidance:"
-    echo "  a) Get full status (distance, behavior, state)"
+    echo "  a) Get full status (both sensors, behavior, state)"
     echo "  b) Set behavior: STOP ONLY"
     echo "  c) Set behavior: BACKUP"
     echo "  d) Set behavior: BACKUP + TURN (full avoidance)"
@@ -82,8 +82,8 @@ while true; do
     
     case $choice in
         1)
-            echo "→ Reading distance sensor..."
-            send_motor_command '{"action":"get_distance"}'
+            echo "→ Reading BOTH distance sensors..."
+            send_motor_command '{"action":"get_sensors"}'
             echo ""
             ;;
         2)
