@@ -159,7 +159,7 @@ GPIO Pin ──┬── Button ── GND
 
 ---
 
-### 7. DC Motors (4x)
+### 7. DC Motors (4x) with 48mm Mecanum Wheels
 
 **Interface:** Connected to Motor HAT terminals
 
@@ -171,7 +171,7 @@ GPIO Pin ──┬── Button ── GND
 | Right Rear | MB+ / MB- | Motor B channel (parallel) |
 
 > [!TIP]
-> Left motors are wired in parallel to Channel A. Right motors are wired in parallel to Channel B. This creates tank-style differential drive.
+> Left motors are wired in parallel to Channel A. Right motors are wired in parallel to Channel B. This creates tank-style differential drive with Mecanum wheels for smooth in-place rotation.
 
 ---
 
@@ -358,7 +358,7 @@ The robot uses **two ultrasonic sensors** for improved obstacle avoidance: one m
 | Microphone | USB or via USB audio adapter | 1 |
 | Speakers | Powered speakers (USB or 3.5mm) | 1 set |
 | Motor Driver HAT | Waveshare (PCA9685 + TB6612FNG) | 1 |
-| DC Motors | Geared motors | 4 |
+| DC Motors | Geared motors with 48mm Mecanum wheels | 4 |
 | Ultrasonic Sensor | HC-SR04-P (3.3V version) | 2 |
 | Push Buttons | Momentary SPST | 5 |
 | Battery Pack | 7.2V NiMH or 2S LiPo | 1 |

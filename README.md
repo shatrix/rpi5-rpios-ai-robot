@@ -10,7 +10,7 @@ Automated setup to replicate a Yocto-based AI robot system on Raspberry Pi OS (D
 - **Audio:** USB Microphone and Speakers
 - **Buttons:** 8x GPIO buttons (K1-K8) on GPIO pins: 5, 6, 13, 19, 26
 - **Motor Control:** Waveshare Motor Driver HAT (I2C, PCA9685 PWM, TB6612FNG H-bridge)
-- **Motors:** 4x DC motors (paired: 2 left, 2 right) powered by 7.2V battery
+- **Motors:** 4x DC geared motors with 48mm Mecanum wheels (paired: 2 left, 2 right) powered by 7.2V battery
 - **Sensors:** 2x HC-SR04-P ultrasonic sensors (3.3V) - Left: GPIO 22/23, Right: GPIO 16/12
 - **Storage:** 16GB+ SD card or NVMe SSD (32GB+ recommended for models)
 - **Cooling:** Official RPi 5 Active Cooler (recommended)
@@ -105,7 +105,7 @@ Automated setup to replicate a Yocto-based AI robot system on Raspberry Pi OS (D
 <td width="50%">
 
 ![Robot Wheels](images/hardware/robot_wheels.jpg)
-*Motor and wheel assembly with ultrasonic sensor*
+*48mm Mecanum wheels with ultrasonic sensor mounting*
 
 </td>
 <td width="50%">
