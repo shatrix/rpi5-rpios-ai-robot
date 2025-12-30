@@ -66,15 +66,23 @@ OBSTACLE_BEHAVIOR_AVOID = "backup_and_turn" # Stop + back up + turn (full avoida
 
 # Avoidance timing (seconds)
 BACKUP_DURATION = 1.0      # How long to back up
-BACKUP_SPEED = 40          # Speed when backing up (0-100)
-AVOID_TURN_DURATION = 2.0  # How long to turn when avoiding (Mecanum wheels turn quickly)
+BACKUP_SPEED = 50          # Speed when backing up (0-100)
+
+# Mecanum wheel turn calibration: seconds to turn 90° at 100% speed
+MECANUM_TURN_DURATION_90DEG = 0.65  # Calibrated for 48mm Mecanum wheels
+
+AVOID_TURN_DURATION = MECANUM_TURN_DURATION_90DEG  # Turn ~90° when avoiding
 AVOID_TURN_SPEED = 100     # Speed when turning to avoid (full power for tank steering)
 
 # Speed limits (0-100%)
 DEFAULT_SPEED = 70
 MAX_SPEED = 100
 MIN_SPEED = 0
-MIN_MOTOR_THRESHOLD = 50  # Minimum PWM to overcome motor stall voltage
+MIN_MOTOR_THRESHOLD = 60  # Minimum PWM to overcome motor stall voltage
+
+# Motor speed compensation (left motors run slower than right)
+# Increase left motor speed by this factor to drive straight
+LEFT_SPEED_COMPENSATION = 1.2  # 20% boost to left motors
 
 # Unix socket for external control
 MOTOR_SOCKET = "/tmp/shatrox-motor-control.sock"
@@ -470,6 +478,7 @@ class MotorController:
         Set motor speed using PWM duty cycle (0-100%)
         motor: 0=left(A), 1=right(B)
         speed: 0-100, but minimum threshold applied to overcome stall voltage
+        Left motor gets compensated to balance asymmetric motor speeds.
         """
         if speed > 100:
             speed = 100
@@ -481,9 +490,10 @@ class MotorController:
         if speed > 0 and speed < MIN_MOTOR_THRESHOLD:
             speed = MIN_MOTOR_THRESHOLD
         
-        if motor == 0:  # Motor A
-            self.pca.setDutycycle(self.PWMA, speed)
-        else:  # Motor B
+        if motor == 0:  # Motor A (Left) - apply compensation for slower left side
+            compensated_speed = min(100, int(speed * LEFT_SPEED_COMPENSATION))
+            self.pca.setDutycycle(self.PWMA, compensated_speed)
+        else:  # Motor B (Right)
             self.pca.setDutycycle(self.PWMB, speed)
     
     def _stop_motors(self):
@@ -563,8 +573,11 @@ class MotorController:
         speed = speed or 100  # Full power for Mecanum
         speed = max(MIN_SPEED, min(MAX_SPEED, speed))
         
-        # Mecanum wheels: 5s per 90°
-        duration = (angle / 90.0) * 5.0
+        # Mecanum wheels: duration scales with speed (slower = more time needed)
+        # Base calibration: MECANUM_TURN_DURATION_90DEG seconds per 90° at 100% speed
+        base_duration = (angle / 90.0) * MECANUM_TURN_DURATION_90DEG
+        # Scale duration inversely with speed (100% = 1x, 50% = 2x time needed)
+        duration = base_duration * (100.0 / max(speed, MIN_MOTOR_THRESHOLD))
         
         self.log(f"TURN LEFT ~{angle}° at {speed}% duration:{duration:.1f}s")
         self.set_motor_speed(0, speed)
@@ -587,8 +600,11 @@ class MotorController:
         speed = speed or 100  # Full power for Mecanum
         speed = max(MIN_SPEED, min(MAX_SPEED, speed))
         
-        # Mecanum wheels: 5s per 90°
-        duration = (angle / 90.0) * 5.0
+        # Mecanum wheels: duration scales with speed (slower = more time needed)
+        # Base calibration: MECANUM_TURN_DURATION_90DEG seconds per 90° at 100% speed
+        base_duration = (angle / 90.0) * MECANUM_TURN_DURATION_90DEG
+        # Scale duration inversely with speed (100% = 1x, 50% = 2x time needed)
+        duration = base_duration * (100.0 / max(speed, MIN_MOTOR_THRESHOLD))
         
         self.log(f"TURN RIGHT ~{angle}° at {speed}% duration:{duration:.1f}s")
         self.set_motor_speed(0, speed)
