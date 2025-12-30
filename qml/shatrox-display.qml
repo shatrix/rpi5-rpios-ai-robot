@@ -68,13 +68,13 @@ ApplicationWindow {
             anchors.top: parent.top
             anchors.topMargin: 5
             anchors.horizontalCenter: parent.horizontalCenter
-            spacing: 180
+            spacing: 270
             
             // Left Eye
             Rectangle {
                 id: leftEye
-                width: 70
-                height: 70
+                width: 100
+                height: 100
                 radius: 50
                 color: "#1a1a1a"
                 border.color: "#00ff00"
@@ -82,18 +82,18 @@ ApplicationWindow {
                 
                 Rectangle {
                     id: leftPupil
-                    width: 20
-                    height: 20
-                    radius: 12
+                    width: 30
+                    height: 30
+                    radius: 15
                     color: "#00ff00"
                     anchors.centerIn: parent
                     
                     SequentialAnimation on y {
                         running: true
                         loops: Animation.Infinite
-                        NumberAnimation { to: leftEye.height * 0.4; duration: 2000 }
+                        NumberAnimation { to: leftEye.height * 0.35; duration: 2000 }
                         NumberAnimation { to: leftEye.height * 0.5; duration: 2000 }
-                        NumberAnimation { to: leftEye.height * 0.6; duration: 2000 }
+                        NumberAnimation { to: leftEye.height * 0.65; duration: 2000 }
                         NumberAnimation { to: leftEye.height * 0.5; duration: 2000 }
                     }
                 }
@@ -122,8 +122,8 @@ ApplicationWindow {
             // Right Eye
             Rectangle {
                 id: rightEye
-                width: 70
-                height: 70
+                width: 100
+                height: 100
                 radius: 50
                 color: "#1a1a1a"
                 border.color: "#00ff00"
@@ -131,18 +131,18 @@ ApplicationWindow {
                 
                 Rectangle {
                     id: rightPupil
-                    width: 20
-                    height: 20
-                    radius: 12
+                    width: 30
+                    height: 30
+                    radius: 15
                     color: "#00ff00"
                     anchors.centerIn: parent
                     
                     SequentialAnimation on y {
                         running: true
                         loops: Animation.Infinite
-                        NumberAnimation { to: rightEye.height * 0.4; duration: 2000 }
+                        NumberAnimation { to: rightEye.height * 0.35; duration: 2000 }
                         NumberAnimation { to: rightEye.height * 0.5; duration: 2000 }
-                        NumberAnimation { to: rightEye.height * 0.6; duration: 2000 }
+                        NumberAnimation { to: rightEye.height * 0.65; duration: 2000 }
                         NumberAnimation { to: rightEye.height * 0.5; duration: 2000 }
                     }
                 }
@@ -174,13 +174,13 @@ ApplicationWindow {
             id: noseTemp
             anchors.horizontalCenter: parent.horizontalCenter
             anchors.verticalCenter: eyesRow.verticalCenter
-            anchors.horizontalCenterOffset: -35
-            width: 65
-            height: 30
-            radius: 6
+            anchors.horizontalCenterOffset: -50
+            width: 90
+            height: 45
+            radius: 8
             color: "#1a1a1a"
             border.color: cpuTempMonitor.tempColor
-            border.width: 2
+            border.width: 3
             
             Row {
                 anchors.centerIn: parent
@@ -189,7 +189,7 @@ ApplicationWindow {
                 Text {
                     text: Math.round(cpuTempMonitor.temperature) + "°C"
                     font.family: "Monospace"
-                    font.pixelSize: 10
+                    font.pixelSize: 18
                     font.bold: true
                     color: cpuTempMonitor.tempColor
                     anchors.verticalCenter: parent.verticalCenter
@@ -201,23 +201,23 @@ ApplicationWindow {
         Rectangle {
             id: volumeIndicator
             anchors.left: noseTemp.right
-            anchors.leftMargin: 5
+            anchors.leftMargin: 8
             anchors.verticalCenter: eyesRow.verticalCenter
-            width: 65
-            height: 30
-            radius: 6
+            width: 90
+            height: 45
+            radius: 8
             color: "#1a1a1a"
             border.color: volumeMonitor.volumeColor
-            border.width: 2
+            border.width: 3
             
             Row {
                 anchors.centerIn: parent
-                spacing: 3
+                spacing: 4
                 
                 Text {
                     text: "♪"
                     font.family: "Monospace"
-                    font.pixelSize: 12
+                    font.pixelSize: 18
                     font.bold: true
                     color: volumeMonitor.volumeColor
                     anchors.verticalCenter: parent.verticalCenter
@@ -226,7 +226,7 @@ ApplicationWindow {
                 Text {
                     text: Math.round(volumeMonitor.volumePercent) + "%"
                     font.family: "Monospace"
-                    font.pixelSize: 10
+                    font.pixelSize: 18
                     font.bold: true
                     color: volumeMonitor.volumeColor
                     anchors.verticalCenter: parent.verticalCenter
@@ -234,16 +234,17 @@ ApplicationWindow {
             }
         }
         
-        // Mouth (Text Display Area) - Now with MORE vertical space
+        // Mouth (Text Display Area) - Reduced height for larger eyes
         Rectangle {
             id: mouthArea
             anchors.top: eyesRow.bottom
-            anchors.topMargin: 10
+            anchors.topMargin: 5
             anchors.left: parent.left
             anchors.right: parent.right
             anchors.bottom: parent.bottom
             anchors.leftMargin: 5
             anchors.rightMargin: 5
+            anchors.bottomMargin: 5
             radius: 8
             color: "#1a1a1a"
             border.color: "#00ff00"
@@ -275,7 +276,7 @@ ApplicationWindow {
                     selectByKeyboard: false
                     
                     font.family: "Monospace"
-                    font.pixelSize: 13
+                    font.pixelSize: 18
                     font.bold: false
                     color: "#00ff00"
                     
@@ -336,7 +337,7 @@ ApplicationWindow {
             anchors.horizontalCenter: parent.horizontalCenter
             text: "📷 Camera Capture"
             font.family: "Monospace"
-            font.pixelSize: 14
+            font.pixelSize: 18
             font.bold: true
             color: "#00ff00"
         }
