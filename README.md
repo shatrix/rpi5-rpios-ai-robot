@@ -1,5 +1,9 @@
 # RPi 5 AI Robot Setup for Raspberry Pi OS
 
+![RPi 5 AI Robot](images/hardware/rpi5-robot-full.jpg)
+
+> 🖨️ **3D Printable Parts:** SCAD scripts, STL files, and a full 3MF project for all 3D printed parts are available at [shatrix/rpi5_robot_openscad](https://github.com/shatrix/rpi5_robot_openscad)
+
 Automated setup to replicate a Yocto-based AI robot system on Raspberry Pi OS (Debian 13).
 
 ## Hardware Requirements
